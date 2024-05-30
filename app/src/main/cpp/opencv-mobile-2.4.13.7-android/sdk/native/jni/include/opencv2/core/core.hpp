@@ -2723,7 +2723,7 @@ enum
 
 //! renders text string in the image
 CV_EXPORTS_W void putText( Mat& img, const string& text, Point org,
-                         int fontFace, double fontScale, Scalar color,
+                         int fontFace, double fontScale, Scalar scalar,
                          int thickness=1, int lineType=8,
                          bool bottomLeftOrigin=false );
 

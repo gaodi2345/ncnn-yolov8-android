@@ -4,6 +4,7 @@
     <string-array name="model_array">
         <item>n</item>
         <item>s</item>
+        <item>s-detect-sim-opt-fp16</item>
     </string-array>
 
     <string-array name="cpu_gpu_array">

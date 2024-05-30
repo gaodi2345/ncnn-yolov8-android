@@ -130,7 +130,8 @@ generate_grids_and_stride(const int target_w, const int target_h, std::vector<in
 static void generate_proposals(std::vector<GridAndStride> grid_strides, const ncnn::Mat &pred,
                                float prob_threshold, std::vector<Object> &objects) {
     const int num_points = grid_strides.size();
-    const int num_class = 80;
+    //识别种类数
+    const int num_class = 43;
     const int reg_max_1 = 16;
 
     for (int i = 0; i < num_points; i++) {
@@ -235,8 +236,12 @@ Yolo::load(AAssetManager *mgr, const char *model_type, int _target_size, const f
 
     char param_path[256];
     char model_path[256];
+    //拼接模型名（路径）
     sprintf(param_path, "yolov8%s.param", model_type);
     sprintf(model_path, "yolov8%s.bin", model_type);
+
+    __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "param_path %s", param_path);
+    __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "model_path %s", model_path);
 
     yolo.load_param(mgr, param_path);
     yolo.load_model(mgr, model_path);
@@ -341,23 +346,15 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
 
 int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {
     static const char *class_names[] = {
-            "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
-            "traffic light",
-            "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse",
-            "sheep", "cow",
-            "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie",
-            "suitcase", "frisbee",
-            "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove",
-            "skateboard", "surfboard",
-            "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl",
-            "banana", "apple",
-            "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake",
-            "chair", "couch",
-            "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote",
-            "keyboard", "cell phone",
-            "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase",
-            "scissors", "teddy bear",
-            "hair drier", "toothbrush"
+            "三脚架", "三通", "人", "切断阀", "危险告知牌",
+            "压力测试仪", "压力表", "反光衣", "呼吸面罩", "喉箍",
+            "圆头水枪", "安全告知牌", "安全帽", "安全标识", "安全绳",
+            "对讲机", "尖头水枪", "开关", "报警装置", "接头",
+            "施工路牌", "气体检测仪", "水带", "水带_矩形", "流量计",
+            "消火栓箱", "灭火器", "照明设备", "熄火保护", "电线暴露",
+            "电路图", "警戒线", "调压器", "调长器", "贴纸",
+            "跨电线", "路锥", "软管", "过滤器", "配电箱",
+            "长柄阀门", "阀门", "风管"
     };
 
     static const unsigned char colors[19][3] = {
@@ -395,6 +392,8 @@ int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {
         char text[256];
         sprintf(text, "%s %.1f%%", class_names[obj.label], obj.prob * 100);
 
+//        __android_log_print(ANDROID_LOG_DEBUG, "ncnn", " %s", text);
+
         int baseLine = 0;
         cv::Size label_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
 
@@ -405,15 +404,20 @@ int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {
         if (x + label_size.width > rgb.cols)
             x = rgb.cols - label_size.width;
 
-        cv::rectangle(rgb, cv::Rect(cv::Point(x, y),
-                                    cv::Size(label_size.width, label_size.height + baseLine)), cc,
-                      -1);
+        cv::Size size = cv::Size(label_size.width, label_size.height + baseLine);
+        cv::Rect rc = cv::Rect(cv::Point(x, y), size);
+        cv::rectangle(rgb, rc, cc, -1);
 
-        cv::Scalar textcc = (color[0] + color[1] + color[2] >= 381) ? cv::Scalar(0, 0, 0)
-                                                                    : cv::Scalar(255, 255, 255);
+        cv::Scalar text_scalar = (color[0] + color[1] + color[2] >= 381)
+                                 ? cv::Scalar(0, 0, 0)
+                                 : cv::Scalar(255, 255, 255);
 
-        cv::putText(rgb, text, cv::Point(x, y + label_size.height), cv::FONT_HERSHEY_SIMPLEX, 0.5,
-                    textcc, 1);
+        cv::putText(rgb, text,
+                    cv::Point(x, y + label_size.height),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    text_scalar, 1
+        );
     }
 
     return 0;
