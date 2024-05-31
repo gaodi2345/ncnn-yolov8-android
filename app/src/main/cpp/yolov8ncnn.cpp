@@ -109,6 +109,8 @@ static int draw_fps(cv::Mat &rgb) {
 
 static Yolo *g_yolo = nullptr;
 static ncnn::Mutex lock;
+static jobject j_callback = nullptr;
+static JavaVM *javaVM = nullptr;
 
 class MyNdkCamera : public NdkCameraWindow {
 public:
@@ -138,6 +140,8 @@ static MyNdkCamera *g_camera = nullptr;
 extern "C" {
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
     __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "JNI_OnLoad");
+
+    javaVM = vm;
 
     g_camera = new MyNdkCamera;
 
@@ -233,13 +237,16 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_closeCamera(JNIEnv *env, jobject thiz) {
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_setOutputWindow(JNIEnv *env, jobject thiz, jobject surface) {
+Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_setOutputWindow(JNIEnv *env, jobject thiz,
+                                                       jobject surface,
+                                                       jobject callback) {
     ANativeWindow *win = ANativeWindow_fromSurface(env, surface);
 
     __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "setOutputWindow %p", win);
 
     g_camera->set_window(win);
 
+    g_yolo->setNativeCallback(javaVM, callback);
     return JNI_TRUE;
 }
 }

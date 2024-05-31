@@ -14,7 +14,8 @@ import androidx.core.content.ContextCompat
 import com.pengxh.kt.lite.base.KotlinBaseActivity
 import com.pengxh.ncnn.yolov8.databinding.ActivityMainBinding
 
-class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Callback {
+class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Callback,
+    INativeCallback {
 
     private val kTag = "MainActivity"
     private val yolov8ncnn by lazy { Yolov8ncnn() }
@@ -87,7 +88,11 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        yolov8ncnn.setOutputWindow(holder.surface)
+        yolov8ncnn.setOutputWindow(holder.surface, this)
+    }
+
+    override fun onDetect(str: String) {
+        Log.d(kTag, "onDetect: $str")
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {}

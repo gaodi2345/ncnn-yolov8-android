@@ -341,7 +341,26 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
     } objects_area_greater;
     std::sort(objects.begin(), objects.end(), objects_area_greater);
 
+    //回调给Java/Kotlin层
+    JNIEnv *env;
+    javaVM->AttachCurrentThread(&env, NULL);
+    jclass clazz = env->GetObjectClass(j_obj);
+    jmethodID j_method_id = env->GetMethodID(clazz, "onDetect", "(Ljava/lang/String;)V");
+    std::string hello = "Hello from C++";
+    jstring jstr = env->NewStringUTF(hello.c_str());
+    env->CallVoidMethod(j_obj, j_method_id, jstr);
     return 0;
+}
+
+void Yolo::setNativeCallback(JavaVM *vm, jobject pJobject) {
+    javaVM = vm;
+
+    /**
+     * JNIEnv不支持跨线程调用
+     * */
+    JNIEnv *env;
+    vm->AttachCurrentThread(&env, NULL);
+    j_obj = env->NewGlobalRef(pJobject);
 }
 
 int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {

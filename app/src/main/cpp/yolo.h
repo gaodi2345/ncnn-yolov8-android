@@ -47,6 +47,8 @@ public:
              const float *norm_values,
              bool use_gpu = false);
 
+    void setNativeCallback(JavaVM *vm, jobject pJobject);
+
     int detect(const cv::Mat &rgb,
                std::vector<Object> &objects,
                float prob_threshold = 0.4f,
@@ -61,6 +63,12 @@ private:
     float norm_values[3];
     ncnn::UnlockedPoolAllocator blob_pool_allocator;
     ncnn::PoolAllocator workspace_pool_allocator;
+
+    /**
+     * 全局引用
+     * */
+    JavaVM *javaVM;
+    jobject j_obj;
 };
 
 #endif
