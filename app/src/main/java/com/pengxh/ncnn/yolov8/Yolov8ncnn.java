@@ -10,7 +10,7 @@ public class Yolov8ncnn {
 
     public native boolean closeCamera();
 
-    public native boolean setOutputWindow(Surface surface, INativeCallback callback);
+    public native boolean setOutputWindow(Surface surface, INativeCallback nativeCallback);
 
     static {
         System.loadLibrary("yolov8ncnn");

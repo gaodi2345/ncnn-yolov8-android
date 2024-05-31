@@ -340,15 +340,6 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
         }
     } objects_area_greater;
     std::sort(objects.begin(), objects.end(), objects_area_greater);
-
-    //回调给Java/Kotlin层
-    JNIEnv *env;
-    javaVM->AttachCurrentThread(&env, NULL);
-    jclass clazz = env->GetObjectClass(j_obj);
-    jmethodID j_method_id = env->GetMethodID(clazz, "onDetect", "(Ljava/lang/String;)V");
-    std::string hello = "Hello from C++";
-    jstring jstr = env->NewStringUTF(hello.c_str());
-    env->CallVoidMethod(j_obj, j_method_id, jstr);
     return 0;
 }
 
@@ -400,43 +391,60 @@ int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {
 
     int color_index = 0;
 
+    JNIEnv *env;
+    javaVM->AttachCurrentThread(&env, NULL);
+    jclass clazz = env->GetObjectClass(j_obj);
+    jmethodID j_method_id = env->GetMethodID(clazz, "onDetect", "(Ljava/lang/String;)V");
+
     for (const auto &obj: objects) {
-        const unsigned char *color = colors[color_index % 19];
-        color_index++;
+        float reliability = obj.prob * 100;
+        if (reliability > 75) {
+            const unsigned char *color = colors[color_index % 19];
 
-        cv::Scalar cc(color[0], color[1], color[2]);
+            color_index++;
 
-        cv::rectangle(rgb, obj.rect, cc, 2);
+            cv::Scalar cc(color[0], color[1], color[2]);
 
-        char text[256];
-        sprintf(text, "%s %.1f%%", class_names[obj.label], obj.prob * 100);
+            cv::rectangle(rgb, obj.rect, cc, 2);
 
-//        __android_log_print(ANDROID_LOG_DEBUG, "ncnn", " %s", text);
+            char text[256];
+            sprintf(text, "%s %.1f%%", class_names[obj.label], reliability);
 
-        int baseLine = 0;
-        cv::Size label_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
+            int baseLine = 0;
+            cv::Size label_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1,
+                                                  &baseLine);
 
-        int x = obj.rect.x;
-        int y = obj.rect.y - label_size.height - baseLine;
-        if (y < 0)
-            y = 0;
-        if (x + label_size.width > rgb.cols)
-            x = rgb.cols - label_size.width;
+            int x = obj.rect.x;
+            int y = obj.rect.y - label_size.height - baseLine;
+            if (y < 0)
+                y = 0;
+            if (x + label_size.width > rgb.cols)
+                x = rgb.cols - label_size.width;
 
-        cv::Size size = cv::Size(label_size.width, label_size.height + baseLine);
-        cv::Rect rc = cv::Rect(cv::Point(x, y), size);
-        cv::rectangle(rgb, rc, cc, -1);
+            cv::Size size = cv::Size(label_size.width, label_size.height + baseLine);
+            cv::Rect rc = cv::Rect(cv::Point(x, y), size);
+            cv::rectangle(rgb, rc, cc, -1);
 
-        cv::Scalar text_scalar = (color[0] + color[1] + color[2] >= 381)
-                                 ? cv::Scalar(0, 0, 0)
-                                 : cv::Scalar(255, 255, 255);
+            cv::Scalar text_scalar = (color[0] + color[1] + color[2] >= 381)
+                                     ? cv::Scalar(0, 0, 0)
+                                     : cv::Scalar(255, 255, 255);
 
-        cv::putText(rgb, text,
-                    cv::Point(x, y + label_size.height),
-                    cv::FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    text_scalar, 1
-        );
+
+            cv::putText(rgb, text,
+                        cv::Point(x, y + label_size.height),
+                        cv::FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        text_scalar, 1
+            );
+
+            //回调给Java/Kotlin层
+            jstring jstr = env->NewStringUTF(text);
+            const char *msg = env->GetStringUTFChars(jstr, nullptr);
+            env->CallVoidMethod(j_obj, j_method_id, jstr);
+            env->ReleaseStringUTFChars(jstr, msg);
+        } else {
+            __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "可信度太低： %.1f%%", reliability);
+        }
     }
 
     return 0;

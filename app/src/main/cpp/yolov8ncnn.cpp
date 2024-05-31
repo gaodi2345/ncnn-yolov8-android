@@ -171,20 +171,16 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadModel(JNIEnv *env, jobject thiz, jobj
 
     AAssetManager *mgr = AAssetManager_fromJava(env, assetManager);
 
-    const char *model_types[] = {"n", "s", "s-detect-sim-opt-fp16"};
+    const char *model_types[] = {"s-detect-sim-opt-fp16"};
 
     const int target_sizes[] = {320, 320, 320,};
 
     const float mean_values[][3] = {
-            {103.53f, 116.28f, 123.675f},
-            {103.53f, 116.28f, 123.675f},
-            {103.53f, 116.28f, 123.675f},
+            {103.53f, 116.28f, 123.675f}
     };
 
     const float norm_values[][3] = {
-            {1 / 255.f, 1 / 255.f, 1 / 255.f},
-            {1 / 255.f, 1 / 255.f, 1 / 255.f},
-            {1 / 255.f, 1 / 255.f, 1 / 255.f},
+            {1 / 255.f, 1 / 255.f, 1 / 255.f}
     };
 
     const char *model_type = model_types[(int) model_id];

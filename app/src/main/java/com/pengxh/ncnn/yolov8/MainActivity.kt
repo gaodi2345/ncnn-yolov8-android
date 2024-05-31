@@ -12,6 +12,7 @@ import android.widget.AdapterView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.pengxh.kt.lite.base.KotlinBaseActivity
+import com.pengxh.kt.lite.extensions.show
 import com.pengxh.ncnn.yolov8.databinding.ActivityMainBinding
 
 class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Callback,
@@ -19,31 +20,11 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
 
     private val kTag = "MainActivity"
     private val yolov8ncnn by lazy { Yolov8ncnn() }
-    private var facing = 0
+    private var facing = 1
     private var currentModel = 0
     private var currentProcessor = 0
 
     override fun initEvent() {
-        binding.switchCameraButton.setOnClickListener {
-            val new = 1 - facing
-            yolov8ncnn.closeCamera()
-            yolov8ncnn.openCamera(new)
-            facing = new
-        }
-
-        binding.modelSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(
-                arg0: AdapterView<*>?, arg1: View, position: Int, id: Long
-            ) {
-                if (position != currentModel) {
-                    currentModel = position
-                    reloadModel()
-                }
-            }
-
-            override fun onNothingSelected(arg0: AdapterView<*>?) {}
-        }
-
         binding.processorSpinner.onItemSelectedListener =
             object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(
@@ -92,7 +73,9 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
     }
 
     override fun onDetect(str: String) {
-        Log.d(kTag, "onDetect: $str")
+        runOnUiThread {
+            str.show(this)
+        }
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {}
