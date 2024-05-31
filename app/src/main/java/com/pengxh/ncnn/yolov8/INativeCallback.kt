@@ -1,5 +1,5 @@
 package com.pengxh.ncnn.yolov8
 
 interface INativeCallback {
-    fun onDetect(str: String)
+    fun onDetect(label: String, rect: FloatArray)
 }

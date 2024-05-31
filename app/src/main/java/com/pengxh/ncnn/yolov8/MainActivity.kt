@@ -12,7 +12,7 @@ import android.widget.AdapterView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.pengxh.kt.lite.base.KotlinBaseActivity
-import com.pengxh.kt.lite.extensions.show
+import com.pengxh.kt.lite.extensions.toJson
 import com.pengxh.ncnn.yolov8.databinding.ActivityMainBinding
 
 class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Callback,
@@ -72,10 +72,9 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         yolov8ncnn.setOutputWindow(holder.surface, this)
     }
 
-    override fun onDetect(str: String) {
-        runOnUiThread {
-            str.show(this)
-        }
+    override fun onDetect(label: String, rect: FloatArray) {
+        Log.d(kTag, label)
+        Log.d(kTag, rect.toJson())
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {}

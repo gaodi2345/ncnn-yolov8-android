@@ -351,7 +351,7 @@ void Yolo::setNativeCallback(JavaVM *vm, jobject pJobject) {
      * */
     JNIEnv *env;
     vm->AttachCurrentThread(&env, NULL);
-    j_obj = env->NewGlobalRef(pJobject);
+    j_callback = env->NewGlobalRef(pJobject);
 }
 
 int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {
@@ -393,8 +393,8 @@ int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {
 
     JNIEnv *env;
     javaVM->AttachCurrentThread(&env, NULL);
-    jclass clazz = env->GetObjectClass(j_obj);
-    jmethodID j_method_id = env->GetMethodID(clazz, "onDetect", "(Ljava/lang/String;)V");
+    jclass callback_clazz = env->GetObjectClass(j_callback);
+    jmethodID j_method_id = env->GetMethodID(callback_clazz, "onDetect", "(Ljava/lang/String;[F)V");
 
     for (const auto &obj: objects) {
         float reliability = obj.prob * 100;
@@ -437,11 +437,26 @@ int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {
                         text_scalar, 1
             );
 
-            //回调给Java/Kotlin层
-            jstring jstr = env->NewStringUTF(text);
-            const char *msg = env->GetStringUTFChars(jstr, nullptr);
-            env->CallVoidMethod(j_obj, j_method_id, jstr);
-            env->ReleaseStringUTFChars(jstr, msg);
+            /**
+             * 回调给Java/Kotlin层
+             * */
+            float array[4];
+            array[0] = obj.rect.x;
+            array[1] = obj.rect.y;
+            array[2] = obj.rect.width;
+            array[3] = obj.rect.height;
+
+            //框
+            jfloatArray rectArray = env->NewFloatArray(4);
+            env->SetFloatArrayRegion(rectArray, 0, 4, array);
+
+            //文字标识
+            jstring label = env->NewStringUTF(text);
+
+            //图片
+
+
+            env->CallVoidMethod(j_callback, j_method_id, label, rectArray);
         } else {
             __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "可信度太低： %.1f%%", reliability);
         }

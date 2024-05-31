@@ -68,7 +68,7 @@ private:
      * 全局引用
      * */
     JavaVM *javaVM;
-    jobject j_obj;
+    jobject j_callback;
 };
 
 #endif
