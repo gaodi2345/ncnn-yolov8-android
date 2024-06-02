@@ -1,2 +1,3 @@
 rootProject.name = "ncnn-yolov8-android"
 include ':app'
+include ':sdk'

@@ -15,3 +15,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+/sdk/.idea
+/sdk/build
+/sdk/java/javadoc

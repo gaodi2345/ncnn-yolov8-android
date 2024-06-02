@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import com.pengxh.kt.lite.base.KotlinBaseActivity
 import com.pengxh.kt.lite.extensions.toJson
 import com.pengxh.ncnn.yolov8.databinding.ActivityMainBinding
+import org.opencv.android.OpenCVLoader
 
 class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Callback,
     INativeCallback {
@@ -60,6 +61,8 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
 
     override fun initOnCreate(savedInstanceState: Bundle?) {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        OpenCVLoader.initLocal()
 
         binding.surfaceView.holder.setFormat(PixelFormat.RGBA_8888)
         binding.surfaceView.holder.addCallback(this)
