@@ -10,8 +10,18 @@
         android:layout_height="45dp"
         android:entries="@array/cpu_gpu_array" />
 
-    <SurfaceView
-        android:id="@+id/surfaceView"
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent">
+
+        <SurfaceView
+            android:id="@+id/surfaceView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <com.pengxh.ncnn.yolov8.AITargetDetectView
+            android:id="@+id/detectView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
 </LinearLayout>

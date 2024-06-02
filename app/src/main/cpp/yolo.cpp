@@ -340,31 +340,95 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
         }
     } objects_area_greater;
     std::sort(objects.begin(), objects.end(), objects_area_greater);
+
+    JNIEnv *env;
+    javaVM->AttachCurrentThread(&env, nullptr);
+    jclass callback_clazz = env->GetObjectClass(j_callback);
+    jclass output_clazz = env->GetObjectClass(j_output);
+    /**
+     * I: 整数类型（int）
+     * J: 长整数类型（long）
+     * D: 双精度浮点数类型（double）
+     * F: 单精度浮点数类型（float）
+     * Z: 布尔类型（boolean）
+     * C: 字符类型（char）
+     * B: 字节类型（byte）
+     * S: 短整数类型（short）
+     * -----------------------------------------------
+     * Ljava/lang/Object;: 表示 Object 类型的引用
+     * Ljava/lang/String;: 表示 String 类型的引用
+     * L包名/类名;: 表示特定包名和类名的引用
+     * -----------------------------------------------
+     * 例如：
+     * int add(int a, int b): (II)I
+     *
+     * String concat(String str1, String str2): (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+     * -----------------------------------------------
+     * [Ljava/lang/String;: 表示 String 类型的一维数组
+     * */
+    jmethodID j_method_id = env->GetMethodID(
+            callback_clazz, "onDetect", "(Lcom/pengxh/ncnn/yolov8/DetectResult;)V"
+    );
+    /**
+     * 回调给Java/Kotlin层
+     * */
+    //创建一个 jobject 数组
+//    auto *buffer = new jobject[objects.size()];
+    for (int i = 0; i < count; i++) {
+        auto item = objects[i];
+
+        jfieldID type = env->GetFieldID(output_clazz, "type", "I");
+        env->SetIntField(j_output, type, item.label);
+
+        jfieldID position = env->GetFieldID(output_clazz, "position", "[F");
+        float array[4];
+        array[0] = item.rect.x;
+        array[1] = item.rect.y;
+        array[2] = item.rect.width;
+        array[3] = item.rect.height;
+        jfloatArray rectArray = env->NewFloatArray(4);
+        env->SetFloatArrayRegion(rectArray, 0, 4, array);
+        env->SetObjectField(j_output, position, rectArray);
+
+        jfieldID prob = env->GetFieldID(output_clazz, "prob", "F");
+        env->SetFloatField(j_output, prob, item.prob);
+
+//        buffer[i] = j_result;
+        env->CallVoidMethod(j_callback, j_method_id, j_output);
+    }
+//    env->CallVoidMethod(j_callback, j_method_id, buffer);
     return 0;
 }
 
-void Yolo::setNativeCallback(JavaVM *vm, jobject pJobject) {
+void Yolo::setNativeCallback(JavaVM *vm, jobject input, jobject pJobject) {
     javaVM = vm;
 
     /**
      * JNIEnv不支持跨线程调用
      * */
     JNIEnv *env;
-    vm->AttachCurrentThread(&env, NULL);
+    vm->AttachCurrentThread(&env, nullptr);
+    //此时input转为output
+    j_output = env->NewGlobalRef(input);
     j_callback = env->NewGlobalRef(pJobject);
 }
 
 int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {
     static const char *class_names[] = {
-            "三脚架", "三通", "人", "切断阀", "危险告知牌",
-            "压力测试仪", "压力表", "反光衣", "呼吸面罩", "喉箍",
-            "圆头水枪", "安全告知牌", "安全帽", "安全标识", "安全绳",
-            "对讲机", "尖头水枪", "开关", "报警装置", "接头",
-            "施工路牌", "气体检测仪", "水带", "水带_矩形", "流量计",
-            "消火栓箱", "灭火器", "照明设备", "熄火保护", "电线暴露",
-            "电路图", "警戒线", "调压器", "调长器", "贴纸",
-            "跨电线", "路锥", "软管", "过滤器", "配电箱",
-            "长柄阀门", "阀门", "风管"
+            "tripod", "tee", "person",
+            "shut-off valve", "hazard signs", "pressure tester",
+            "pressure gauge", "reflective clothing", "respirator masks",
+            "throat foil", "round-headed water gun", "safety signs",
+            "helmet", "security identification", "safety ropes",
+            "intercom", "pointed water gun", "switch",
+            "alarm device", "joint", "construction street signs",
+            "gas detectors", "hoses", "hose_rectangle",
+            "flow-meter", "fire hydrant box", "fire extinguisher",
+            "lighting equipment", "flame-out protection", "exposed wires",
+            "circuit diagram", "cordon", "regulator",
+            "length adjuster", "stickers", "across wires",
+            "road cones", "hose", "filter",
+            "distribution box", "long-shank valves", "valve", "ducts"
     };
 
     static const unsigned char colors[19][3] = {
@@ -391,76 +455,44 @@ int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {
 
     int color_index = 0;
 
-    JNIEnv *env;
-    javaVM->AttachCurrentThread(&env, NULL);
-    jclass callback_clazz = env->GetObjectClass(j_callback);
-    jmethodID j_method_id = env->GetMethodID(callback_clazz, "onDetect", "(Ljava/lang/String;[F)V");
-
     for (const auto &obj: objects) {
-        float reliability = obj.prob * 100;
-        if (reliability > 75) {
-            const unsigned char *color = colors[color_index % 19];
+        const unsigned char *color = colors[color_index % 19];
 
-            color_index++;
+        color_index++;
 
-            cv::Scalar cc(color[0], color[1], color[2]);
+        cv::Scalar cc(color[0], color[1], color[2]);
 
-            cv::rectangle(rgb, obj.rect, cc, 2);
+        cv::rectangle(rgb, obj.rect, cc, 2);
 
-            char text[256];
-            sprintf(text, "%s %.1f%%", class_names[obj.label], reliability);
+        char text[256];
+        sprintf(text, "%s %.1f%%", class_names[obj.label], obj.prob * 100);
 
-            int baseLine = 0;
-            cv::Size label_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1,
-                                                  &baseLine);
+        int baseLine = 0;
+        cv::Size label_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1,
+                                              &baseLine);
 
-            int x = obj.rect.x;
-            int y = obj.rect.y - label_size.height - baseLine;
-            if (y < 0)
-                y = 0;
-            if (x + label_size.width > rgb.cols)
-                x = rgb.cols - label_size.width;
+        int x = obj.rect.x;
+        int y = obj.rect.y - label_size.height - baseLine;
+        if (y < 0)
+            y = 0;
+        if (x + label_size.width > rgb.cols)
+            x = rgb.cols - label_size.width;
 
-            cv::Size size = cv::Size(label_size.width, label_size.height + baseLine);
-            cv::Rect rc = cv::Rect(cv::Point(x, y), size);
-            cv::rectangle(rgb, rc, cc, -1);
+        cv::Size size = cv::Size(label_size.width, label_size.height + baseLine);
+        cv::Rect rc = cv::Rect(cv::Point(x, y), size);
+        cv::rectangle(rgb, rc, cc, -1);
 
-            cv::Scalar text_scalar = (color[0] + color[1] + color[2] >= 381)
-                                     ? cv::Scalar(0, 0, 0)
-                                     : cv::Scalar(255, 255, 255);
+        cv::Scalar text_scalar = (color[0] + color[1] + color[2] >= 381)
+                                 ? cv::Scalar(0, 0, 0)
+                                 : cv::Scalar(255, 255, 255);
 
 
-            cv::putText(rgb, text,
-                        cv::Point(x, y + label_size.height),
-                        cv::FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        text_scalar, 1
-            );
-
-            /**
-             * 回调给Java/Kotlin层
-             * */
-            float array[4];
-            array[0] = obj.rect.x;
-            array[1] = obj.rect.y;
-            array[2] = obj.rect.width;
-            array[3] = obj.rect.height;
-
-            //框
-            jfloatArray rectArray = env->NewFloatArray(4);
-            env->SetFloatArrayRegion(rectArray, 0, 4, array);
-
-            //文字标识
-            jstring label = env->NewStringUTF(text);
-
-            //图片
-
-
-            env->CallVoidMethod(j_callback, j_method_id, label, rectArray);
-        } else {
-            __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "可信度太低： %.1f%%", reliability);
-        }
+        cv::putText(rgb, text,
+                    cv::Point(x, y + label_size.height),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    text_scalar, 1
+        );
     }
-
     return 0;
 }

@@ -20,6 +20,17 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
 
     private val kTag = "MainActivity"
     private val yolov8ncnn by lazy { Yolov8ncnn() }
+    private val classNames = arrayListOf(
+        "三脚架", "三通", "人", "切断阀", "危险告知牌",
+        "压力测试仪", "压力表", "反光衣", "呼吸面罩", "喉箍",
+        "圆头水枪", "安全告知牌", "安全帽", "安全标识", "安全绳",
+        "对讲机", "尖头水枪", "开关", "报警装置", "接头",
+        "施工路牌", "气体检测仪", "水带", "水带_矩形", "流量计",
+        "消火栓箱", "灭火器", "照明设备", "熄火保护", "电线暴露",
+        "电路图", "警戒线", "调压器", "调长器", "贴纸",
+        "跨电线", "路锥", "软管", "过滤器", "配电箱",
+        "长柄阀门", "阀门", "风管"
+    )
     private var facing = 1
     private var currentModel = 0
     private var currentProcessor = 0
@@ -69,12 +80,11 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        yolov8ncnn.setOutputWindow(holder.surface, this)
+        yolov8ncnn.setOutputWindow(holder.surface, DetectResult(), this)
     }
 
-    override fun onDetect(label: String, rect: FloatArray) {
-        Log.d(kTag, label)
-        Log.d(kTag, rect.toJson())
+    override fun onDetect(output: DetectResult) {
+        Log.d(kTag, output.toJson())
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {}

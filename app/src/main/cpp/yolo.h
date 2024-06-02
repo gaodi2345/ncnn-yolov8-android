@@ -47,7 +47,7 @@ public:
              const float *norm_values,
              bool use_gpu = false);
 
-    void setNativeCallback(JavaVM *vm, jobject pJobject);
+    void setNativeCallback(JavaVM *vm, jobject result, jobject pJobject);
 
     int detect(const cv::Mat &rgb,
                std::vector<Object> &objects,
@@ -68,6 +68,9 @@ private:
      * 全局引用
      * */
     JavaVM *javaVM;
+    //输出结果类
+    jobject j_output;
+    //回调类
     jobject j_callback;
 };
 
