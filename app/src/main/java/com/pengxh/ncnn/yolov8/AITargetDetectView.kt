@@ -4,10 +4,11 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.RectF
+import android.graphics.Rect
 import android.text.TextPaint
 import android.util.AttributeSet
 import android.view.View
+import com.pengxh.kt.lite.extensions.dp2px
 import com.pengxh.kt.lite.extensions.sp2px
 
 class AITargetDetectView constructor(context: Context, attrs: AttributeSet) : View(context, attrs) {
@@ -15,8 +16,20 @@ class AITargetDetectView constructor(context: Context, attrs: AttributeSet) : Vi
     private val kTag = "DetectView"
     private val textPaint by lazy { TextPaint() }
     private val backgroundPaint by lazy { Paint() }
-    private val rectF by lazy { RectF() }
-    private var result: DetectResult? = null
+    private val borderPaint by lazy { Paint() }
+    private val rect by lazy { Rect() }
+    private val classNames = arrayListOf(
+        "三脚架", "三通", "人", "切断阀", "危险告知牌",
+        "压力测试仪", "压力表", "反光衣", "呼吸面罩", "喉箍",
+        "圆头水枪", "安全告知牌", "安全帽", "安全标识", "安全绳",
+        "对讲机", "尖头水枪", "开关", "报警装置", "接头",
+        "施工路牌", "气体检测仪", "水带", "水带_矩形", "流量计",
+        "消火栓箱", "灭火器", "照明设备", "熄火保护", "电线暴露",
+        "电路图", "警戒线", "调压器", "调长器", "贴纸",
+        "跨电线", "路锥", "软管", "过滤器", "配电箱",
+        "长柄阀门", "阀门", "风管"
+    )
+    private var results: MutableList<DetectResult> = ArrayList()
 
     init {
         textPaint.color = Color.WHITE
@@ -27,39 +40,49 @@ class AITargetDetectView constructor(context: Context, attrs: AttributeSet) : Vi
         backgroundPaint.color = Color.BLUE
         backgroundPaint.style = Paint.Style.FILL
         backgroundPaint.isAntiAlias = true
+
+        borderPaint.color = Color.BLUE
+        borderPaint.style = Paint.Style.STROKE
+        borderPaint.strokeWidth = 2f.dp2px(context) //设置线宽
+        borderPaint.isAntiAlias = true
     }
 
-    fun updateTargetPosition(result: DetectResult?) {
-        this.result = result
-        invalidate()
-    }
-
-    fun clearTargetPosition() {
-        this.result = null
-        invalidate()
+    fun updateTargetPosition(results: MutableList<DetectResult>) {
+        this.results = results
+        postInvalidate()
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        result?.apply {
-            //画文字
-//            canvas.drawText(
-//                type,
-//                (position[0] + position[2] / 2).dp2px(context),
-//                (position[1] + position[3] / 2).dp2px(context),
-//                textPaint
-//            )
+        results.forEach {
+            val label = classNames[it.type]
+            val textLength = textPaint.measureText(label)
 
-            //画背景
-//            val textWidth = textPaint.measureText(typeName)
-//            rectF.set(
-//                rectPosition[0].dp2px(context),
-//                rectPosition[1].dp2px(context),
-//                (rectPosition[2] + rectPosition[0]).dp2px(context),
-//                (rectPosition[3] + rectPosition[1]).dp2px(context)
-//            )
-//            canvas.drawOval(rectF, backgroundPaint)
+            //文字背景
+            rect.set(
+                (it.position[0].dp2px(context)).toInt(),
+                (it.position[1].dp2px(context)).toInt(),
+                (it.position[0].dp2px(context) + textLength).toInt() + 10,
+                it.position[1].dp2px(context).toInt() - 40
+            )
+            canvas.drawRect(rect, backgroundPaint)
+
+            //画文字。数值是文字左右边距，可酌情调整
+            canvas.drawText(
+                label,
+                it.position[0].dp2px(context) + (textLength + 10) / 2,
+                it.position[1].dp2px(context) - 10,
+                textPaint
+            )
+
+            //画框
+            rect.set(
+                (it.position[0].dp2px(context)).toInt(),
+                (it.position[1].dp2px(context)).toInt(),
+                (it.position[2] + it.position[0]).dp2px(context).toInt(),
+                (it.position[3] + it.position[1]).dp2px(context).toInt()
+            )
+            canvas.drawRect(rect, borderPaint)
         }
-        invalidate()
     }
 }

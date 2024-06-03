@@ -123,14 +123,18 @@ void MyNdkCamera::on_image_render(cv::Mat &rgb) const {
 
         if (g_yolo) {
             std::vector<Object> objects;
+
+            //TODO 检测
             g_yolo->detect(rgb, objects);
 
-            g_yolo->draw(rgb, objects);
+            //绘制检测结果（不支持中文）
+//            g_yolo->draw(rgb, objects);
         } else {
             draw_unsupported(rgb);
         }
     }
 
+    //回执画面FPS值
     draw_fps(rgb);
 }
 
@@ -233,7 +237,7 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_closeCamera(JNIEnv *env, jobject thiz) {
 
 JNIEXPORT jboolean JNICALL
 Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_setOutputWindow(JNIEnv *env, jobject thiz, jobject surface,
-                                                       jobject input,jobject native_callback) {
+                                                       jobject input, jobject native_callback) {
     ANativeWindow *win = ANativeWindow_fromSurface(env, surface);
 
     __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "setOutputWindow %p", win);
