@@ -4,7 +4,7 @@
 
 ### 1、课题背景
 
-本课题原本采用Android端采集实时画面帧，然后通过网络将画面帧传递到媒体服务器，服务器再用Python+Yolov8对画面帧做检测和识别，最后将结果返回给Android端去绘制目标检测结果。这样做最大的问题就是延时，经过局域网、4/5G网络测试，延时大概1-2s，此方案并不是最优解。为了优化（解决）此痛点，就必须将目标检测和识别移植到Android端，否则这个延时不可能会降下来。
+本课题原本采用Android端采集实时画面帧，然后通过网络将画面帧传递到媒体服务器，服务器再用Python+Yolov8对画面帧做检测和识别，最后将结果返回给Android端去绘制目标检测结果。这样做最大的问题就是延时，经过局域网、4/5G/WiFi网络测试，延时大概1-2s，此方案并不是最优解。为了优化（解决）此痛点，就必须将目标检测和识别移植到Android端，否则这个延时不可能会降下来。
 
 ### 2、解决方案
 
@@ -206,7 +206,7 @@ android.enableJetifier=true
 
 #### 3.2、集成腾讯神经网络框架-ncnn
 
-先到[腾讯ncnn开源库](https://github.com/Tencent/ncnn)下载最新的框架，如图：
+先下载[腾讯ncnn开源库](https://github.com/Tencent/ncnn)最新的框架，如图：
 
 ![微信截图_20240603180404.png](imags/微信截图_20240603180404.png)
 
@@ -230,8 +230,7 @@ project根据实际情况修改即可，然后点击”Sync Now“
 
 #### 3.3、集成opencv-mobile框架
 
-同理，先去[opencv-mobile](https://objects.githubusercontent.com/github-production-release-asset-2e65be/327885181/315e5f06-4555-4466-83e7-a8efb5a8200c?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=releaseassetproduction%2F20240603%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20240603T101806Z&X-Amz-Expires=300&X-Amz-Signature=35ce52016d06efbff0f8050f56fd126fdb4fa53d0c74e0d23f45be7e9e367bde&X-Amz-SignedHeaders=host&actor_id=20377551&key_id=0&repo_id=327885181&response-content-disposition=attachment%3B%20filename%3Dopencv-mobile-2.4.13.7-android.zip&response-content-type=application%2Foctet-stream)
-下载框架，如图：
+同理，先去[opencv-mobile](https://objects.githubusercontent.com/github-production-release-asset-2e65be/327885181/315e5f06-4555-4466-83e7-a8efb5a8200c?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=releaseassetproduction%2F20240603%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20240603T101806Z&X-Amz-Expires=300&X-Amz-Signature=35ce52016d06efbff0f8050f56fd126fdb4fa53d0c74e0d23f45be7e9e367bde&X-Amz-SignedHeaders=host&actor_id=20377551&key_id=0&repo_id=327885181&response-content-disposition=attachment%3B%20filename%3Dopencv-mobile-2.4.13.7-android.zip&response-content-type=application%2Foctet-stream)下载框架，如图：
 
 ![微信截图_20240603181800.png](imags/微信截图_20240603181800.png)
 
@@ -239,7 +238,7 @@ project根据实际情况修改即可，然后点击”Sync Now“
 
 ![微信截图_20240603182024.png](imags/微信截图_20240603182024.png)
 
-修改新建项目时侯生成的 [CMakeLists.txt](app/src/main/cpp/CMakeLists.txt)，如下：
+修改上一步的 [CMakeLists.txt](app/src/main/cpp/CMakeLists.txt)，添加如下代码：
 
 ```cmake
 set(OpenCV_DIR ${CMAKE_SOURCE_DIR}/opencv-mobile-2.4.13.7-android/sdk/native/jni)
@@ -252,9 +251,7 @@ find_package(OpenCV REQUIRED core imgproc)
 
 这里的OpenCV和3.3里面的opencv-mobile是有区别的，opencv-mobile是专门针对移动端做了优化。此处引入OpenCV的目的是为了后面的画面预览的数据矩阵。
 
-
 ////////////////////////////未完待续////////////////////////////
-
 
 最后感谢各个开源者的辛勤付出（排名不分先后）：
 
