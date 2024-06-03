@@ -37,7 +37,7 @@ rootProject.name = "Test"
 include ':app'
 ```
 
-注意，rootProject.name修改为自己的项目名。
+注意，rootProject.name修改为自己的项目名。其余代码全部删除，用不到。
 
 再修改项目根目录下的 [build.gradle](build.gradle) 如下：
 
@@ -164,7 +164,7 @@ dependencies {
 
 然后修改 [MainActivity.kt](app/src/main/java/com/pengxh/ncnn/yolov8/MainActivity.kt) 如下：
 
-```Kotlin
+```kotlin
 class MainActivity : KotlinBaseActivity<ActivityMainBinding>() {
     override fun initEvent() {
 
@@ -210,7 +210,7 @@ android.enableJetifier=true
 
 ![微信截图_20240603180404.png](imags/微信截图_20240603180404.png)
 
-然后解压，复制到项目的cpp目录下，不要改任何文件以及代码，如下图：
+然后解压，复制到项目的cpp目录下，**不要改任何文件以及代码**，如下图：
 ![微信截图_20240603180840.png](imags/微信截图_20240603180840.png)
 
 修改新建项目时侯生成的 [CMakeLists.txt](app/src/main/cpp/CMakeLists.txt)，如下：
@@ -230,11 +230,12 @@ project根据实际情况修改即可，然后点击”Sync Now“
 
 #### 3.3、集成opencv-mobile框架
 
-同理，先去[opencv-mobile](https://objects.githubusercontent.com/github-production-release-asset-2e65be/327885181/315e5f06-4555-4466-83e7-a8efb5a8200c?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=releaseassetproduction%2F20240603%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20240603T101806Z&X-Amz-Expires=300&X-Amz-Signature=35ce52016d06efbff0f8050f56fd126fdb4fa53d0c74e0d23f45be7e9e367bde&X-Amz-SignedHeaders=host&actor_id=20377551&key_id=0&repo_id=327885181&response-content-disposition=attachment%3B%20filename%3Dopencv-mobile-2.4.13.7-android.zip&response-content-type=application%2Foctet-stream)下载框架，如图：
+同理，先去[opencv-mobile](https://objects.githubusercontent.com/github-production-release-asset-2e65be/327885181/315e5f06-4555-4466-83e7-a8efb5a8200c?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=releaseassetproduction%2F20240603%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20240603T101806Z&X-Amz-Expires=300&X-Amz-Signature=35ce52016d06efbff0f8050f56fd126fdb4fa53d0c74e0d23f45be7e9e367bde&X-Amz-SignedHeaders=host&actor_id=20377551&key_id=0&repo_id=327885181&response-content-disposition=attachment%3B%20filename%3Dopencv-mobile-2.4.13.7-android.zip&response-content-type=application%2Foctet-stream)
+下载框架，如图：
 
 ![微信截图_20240603181800.png](imags/微信截图_20240603181800.png)
 
-然后解压，复制到项目的cpp目录下，不要改任何文件以及代码，如下图：
+然后解压，复制到项目的cpp目录下，**不要改任何文件以及代码**，如下图：
 
 ![微信截图_20240603182024.png](imags/微信截图_20240603182024.png)
 
