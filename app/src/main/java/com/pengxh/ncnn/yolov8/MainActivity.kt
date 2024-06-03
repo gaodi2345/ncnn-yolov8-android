@@ -2,6 +2,7 @@ package com.pengxh.ncnn.yolov8
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.os.Bundle
 import android.util.Log
@@ -12,14 +13,20 @@ import android.widget.AdapterView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.pengxh.kt.lite.base.KotlinBaseActivity
+import com.pengxh.kt.lite.extensions.createImageFileDir
+import com.pengxh.kt.lite.extensions.saveImage
 import com.pengxh.ncnn.yolov8.databinding.ActivityMainBinding
 import org.opencv.android.OpenCVLoader
+import org.opencv.android.Utils
+import org.opencv.core.Mat
+
 
 class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Callback,
     INativeCallback {
 
     private val kTag = "MainActivity"
     private val yolov8ncnn by lazy { Yolov8ncnn() }
+    private val mat by lazy { Mat() }
     private var facing = 1
     private var currentModel = 0
     private var currentProcessor = 0
@@ -71,11 +78,19 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        yolov8ncnn.setOutputWindow(holder.surface, DetectResult(), this)
+        yolov8ncnn.setOutputWindow(holder.surface, DetectResult(), mat.nativeObjAddr, this)
     }
 
     override fun onDetect(output: ArrayList<DetectResult>) {
         binding.detectView.updateTargetPosition(output)
+
+        if (mat.width() > 0 || mat.height() > 0) {
+            val bitmap = Bitmap.createBitmap(mat.width(), mat.height(), Bitmap.Config.ARGB_8888)
+            Utils.matToBitmap(mat, bitmap, true)
+            bitmap.saveImage("${createImageFileDir()}/${System.currentTimeMillis()}.png")
+        } else {
+            Log.d(kTag, "width: ${mat.width()}, height: ${mat.height()}")
+        }
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {}

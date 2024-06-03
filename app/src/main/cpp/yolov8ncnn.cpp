@@ -237,14 +237,13 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_closeCamera(JNIEnv *env, jobject thiz) {
 
 JNIEXPORT jboolean JNICALL
 Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_setOutputWindow(JNIEnv *env, jobject thiz, jobject surface,
-                                                       jobject input, jobject native_callback) {
+                                                       jobject input, jlong nativeObjAddr,
+                                                       jobject native_callback) {
     ANativeWindow *win = ANativeWindow_fromSurface(env, surface);
-
-    __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "setOutputWindow %p", win);
 
     g_camera->set_window(win);
 
-    g_yolo->setNativeCallback(javaVM, input, native_callback);
+    g_yolo->setNativeCallback(javaVM, input, nativeObjAddr, native_callback);
     return JNI_TRUE;
 }
 }

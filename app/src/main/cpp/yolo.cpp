@@ -404,10 +404,20 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
     }
     //回调
     env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
+
+    /**
+     * Mat数据。
+     * <br>-----------------------------------------------<br>
+     * 通过内存地址赋值。Java层传入Mat对象内存地址，再通过C++给此地址赋值，Java即可得到内存地址的Mat矩阵数据
+     * */
+    __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "nativeObjAddr %lld", j_mat_addr);
+    auto *res = (cv::Mat *) j_mat_addr;
+    res->create(rgb.rows, rgb.cols, rgb.type());
+    memcpy(res->data, rgb.data, rgb.rows * rgb.step);
     return 0;
 }
 
-void Yolo::setNativeCallback(JavaVM *vm, jobject input, jobject pJobject) {
+void Yolo::setNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, jobject pJobject) {
     javaVM = vm;
 
     /**
@@ -417,6 +427,9 @@ void Yolo::setNativeCallback(JavaVM *vm, jobject input, jobject pJobject) {
     vm->AttachCurrentThread(&env, nullptr);
     //此时input转为output
     j_output = env->NewGlobalRef(input);
+
+    j_mat_addr = nativeObjAddr;
+
     j_callback = env->NewGlobalRef(pJobject);
 }
 

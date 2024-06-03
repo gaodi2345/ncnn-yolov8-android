@@ -47,7 +47,7 @@ public:
              const float *norm_values,
              bool use_gpu = false);
 
-    void setNativeCallback(JavaVM *vm, jobject result, jobject pJobject);
+    void setNativeCallback(JavaVM *vm, jobject result, jlong nativeObjAddr, jobject pJobject);
 
     int detect(const cv::Mat &rgb,
                std::vector<Object> &objects,
@@ -70,6 +70,8 @@ private:
     JavaVM *javaVM;
     //输出结果类
     jobject j_output;
+    //Java传过来的Mat对象内存地址
+    jlong j_mat_addr;
     //回调类
     jobject j_callback;
 };
