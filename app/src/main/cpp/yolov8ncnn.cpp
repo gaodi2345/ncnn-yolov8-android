@@ -109,7 +109,6 @@ static int draw_fps(cv::Mat &rgb) {
 
 static Yolo *g_yolo = nullptr;
 static ncnn::Mutex lock;
-static jobject j_callback = nullptr;
 static JavaVM *javaVM = nullptr;
 
 class MyNdkCamera : public NdkCameraWindow {

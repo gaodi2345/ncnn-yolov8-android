@@ -341,6 +341,9 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
     } objects_area_greater;
     std::sort(objects.begin(), objects.end(), objects_area_greater);
 
+    /**
+     * 回调给Java/Kotlin层
+     * */
     JNIEnv *env;
     javaVM->AttachCurrentThread(&env, nullptr);
     jclass callback_clazz = env->GetObjectClass(j_callback);
@@ -354,26 +357,29 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
      * C: 字符类型（char）
      * B: 字节类型（byte）
      * S: 短整数类型（short）
-     * -----------------------------------------------
+     * <br>-----------------------------------------------<br>
      * Ljava/lang/Object;: 表示 Object 类型的引用
      * Ljava/lang/String;: 表示 String 类型的引用
      * L包名/类名;: 表示特定包名和类名的引用
-     * -----------------------------------------------
+     * <br>-----------------------------------------------<br>
      * 例如：
      * int add(int a, int b): (II)I
      *
      * String concat(String str1, String str2): (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
-     * -----------------------------------------------
+     * <br>-----------------------------------------------<br>
      * [Ljava/lang/String;: 表示 String 类型的一维数组
      * */
     jmethodID j_method_id = env->GetMethodID(
-            callback_clazz, "onDetect", "(Lcom/pengxh/ncnn/yolov8/DetectResult;)V"
+            callback_clazz, "onDetect", "(Ljava/util/ArrayList;)V"
     );
-    /**
-     * 回调给Java/Kotlin层
-     * */
-    //创建一个 jobject 数组
-//    auto *buffer = new jobject[objects.size()];
+
+    //获取ArrayList类
+    jclass list_clazz = env->FindClass("java/util/ArrayList");
+    jmethodID arraylist_init = env->GetMethodID(list_clazz, "<init>", "()V");
+    jmethodID arraylist_add = env->GetMethodID(list_clazz, "add", "(Ljava/lang/Object;)Z");
+    //初始化ArrayList对象
+    jobject arraylist_obj = env->NewObject(list_clazz, arraylist_init);
+
     for (int i = 0; i < count; i++) {
         auto item = objects[i];
 
@@ -393,10 +399,11 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
         jfieldID prob = env->GetFieldID(output_clazz, "prob", "F");
         env->SetFloatField(j_output, prob, item.prob);
 
-//        buffer[i] = j_result;
-        env->CallVoidMethod(j_callback, j_method_id, j_output);
+        //add
+        env->CallBooleanMethod(arraylist_obj, arraylist_add, j_output);
     }
-//    env->CallVoidMethod(j_callback, j_method_id, buffer);
+    //回调
+    env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
     return 0;
 }
 
@@ -465,7 +472,8 @@ int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {
         cv::rectangle(rgb, obj.rect, cc, 2);
 
         char text[256];
-        sprintf(text, "%s %.1f%%", class_names[obj.label], obj.prob * 100);
+        sprintf(text, "%s", class_names[obj.label]);
+//        sprintf(text, "%s %.1f%%", class_names[obj.label], obj.prob * 100);
 
         int baseLine = 0;
         cv::Size label_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1,

@@ -86,7 +86,7 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         yolov8ncnn.setOutputWindow(holder.surface, DetectResult(), this)
     }
 
-    override fun onDetect(output: DetectResult) {
+    override fun onDetect(output: ArrayList<DetectResult>) {
         Log.d(kTag, output.toJson())
     }
 
