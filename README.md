@@ -349,7 +349,8 @@ target_link_libraries(yolov8ncnn ncnn ${OpenCV_LIBS} camera2ndk mediandk)
 最终的cmake代码如下图：
 ![微信截图_20240604101534.png](imags/微信截图_20240604101534.png)
 
-复制过去的文件，有四个函数一定是没有高亮的，如下图：
+#### 5.5、Java/C/C++代码调整
+复制过去的yolov8ncnn.cpp文件，有四个函数一定是没有高亮的，如下图：
 
 ![微信截图_20240604101848.png](imags/微信截图_20240604101848.png)
 
