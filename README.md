@@ -355,7 +355,7 @@ target_link_libraries(yolov8ncnn ncnn ${OpenCV_LIBS} camera2ndk mediandk)
 ![微信截图_20240604101848.png](imags/微信截图_20240604101848.png)
 
 此时需要将此函数根据情况修改为自己项目包名_函数名的方式，”.“用”_
-“代替，比如：com.casic.test.Yolov8ncnn应改为Java_com_casic_test_Yolov8ncnn，改为之后就会发现，这四个函数已经高亮了，说明桥接代码已经生效。
+“代替，比如：com.casic.test.Yolov8ncnn应改为Java_com_casic_test_Yolov8ncnn，改了之后就会发现，这四个函数已经高亮了，说明桥接代码已经生效。
 
 * Java
   ![微信截图_20240604093515.png](imags/微信截图_20240604093515.png)
