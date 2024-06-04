@@ -405,7 +405,8 @@ Project“，再”Build-Refresh Linked C++ Projects“，最后关闭工程重�
     };
 ```
 
-其中model_types里面的值是你yolov8模型去掉前缀以及后缀剩下的部分，比如：yolov8**s-detect-sim-opt-fp16**.bin
+其中model_types里面的值是你yolov8模型去掉前缀以及后缀剩下的部分，比如：yolov8**s-detect-sim-opt-fp16**
+.bin
 的值应该是 s-detect-sim-opt-fp16，一定要注意，否则会报错，找不到模型。
 
 * 修改Java_com_casic_test_Yolov8ncnn_setOutputWindow方法（同样注意包名），在return前面加一行代码：
@@ -417,6 +418,116 @@ g_yolo->setNativeCallback(javaVM, input, nativeObjAddr, native_callback);
 以上这些，我在代码里面已经加好，注意下就可以了。
 
 #### 6.2、修改Yolo.h
+
+* 添加全局变量
+
+```cpp
+    JavaVM *javaVM;
+    //输出结果类
+    jobject j_output;
+    //Java传过来的Mat对象内存地址
+    jlong j_mat_addr;
+    //回调类
+    jobject j_callback;
+```
+
+* 添加Java/C++初始化函数
+
+```cpp
+void setNativeCallback(JavaVM *vm, jobject result, jlong nativeObjAddr, jobject pJobject);
+```
+
+#### 6.3、修改Yolo.cpp
+
+* 修改generate_proposals函数
+
+根据自己模型能够识别的目标种类修改此函数的num_class字段，比如，此处我已改为如下：
+
+```cpp
+const int num_class = 43;
+```
+
+* 实现自己在Yolo.h里面定义的setNativeCallback函数
+
+```cpp
+void Yolo::setNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, jobject pJobject) {
+    javaVM = vm;
+
+    /**
+     * JNIEnv不支持跨线程调用
+     * */
+    JNIEnv *env;
+    vm->AttachCurrentThread(&env, nullptr);
+    //此时input转为output
+    j_output = env->NewGlobalRef(input);
+
+    j_mat_addr = nativeObjAddr;
+
+    j_callback = env->NewGlobalRef(pJobject);
+}
+```
+
+有个注意点，JNIEnv不支持跨线程调用，一定要注意，否则会报错，之前在Yolo.h定义的全局变量也需要在此处初始化。
+以上这些，我在代码里面已经加好，如果要加自己的逻辑，知道在此处改就行了。
+
+* 修改detect函数（划重点！划重点！划重点！）
+
+其实在以上步骤完成时候就已经能把自定义的模型在Android端跑起来了（运行了一下，没效果？？？那是自然，因为 [MainActivity.kt](app/src/main/java/com/pengxh/ncnn/yolov8/MainActivity.kt)
+还没有实现逻辑），已经可以检测目标了。
+
+但是有缺陷，第一就是检测的结果只能在C++层面使用，Java/Kotlin层无法用，所以修改此函数的目的就是把检测结果回传到应用层，让应用层去做具体业务逻辑处理。第二个就是，C++底层只能渲染英文字符，中文的显示不出来或者显示乱码，当然也不是没有解决思路，需要交叉编译freetype2这个库，有兴趣的可以自行实现。
+
+**知识点预热**
+
+1. 基本类型签名
+
+|  Java   |   JNI    | 签名  |
+|:-------:|:--------:|:---:|
+|  byte   |  jbyte   |  B  |
+|  char   |  jchar   |  C  |
+| double  | jdouble  |  D  |
+|  float  |  jfloat  |  F  |
+|   int   |   jint   |  I  |
+|  short  |  jshort  |  S  |
+|  long   |  jlong   |  J  |
+| boolean | jboolean |  Z  |
+|  void   |   void   |  V  |
+
+2. 引用数据类型的转换
+
+|   Java    |      JNI      |          签名           |
+|:---------:|:-------------:|:---------------------:|
+|   所有对象    |    jobject    |    L+classname +;     |
+|   Class   |    jclass     |   Ljava/lang/Class;   |
+|  String   |    jstring    |  Ljava/lang/String;   |
+| Throwable |  jthrowable   | Ljava/lang/Throwable; |
+| Object[]  | jobjectArray  |    [L+classname +;    |
+|  byte[]   |  jbyteArray   |          [B           |
+|  char[]   |  jcharArray   |          [C           |
+| double[]  | jdoubleArray  |          [D           |
+|  float[]  |  jfloatArray  |          [F           |
+|   int[]   |   jintArray   |          [I           |
+|  short[]  |  jshortArray  |          [S           |
+|  long[]   |  jlongArray   |          [J           |
+| boolean[] | jbooleanArray |          [Z           |
+
+预热完毕，举几个例子：
+
+```cpp
+函数：int add(int a, int b)
+签名：(II)I
+说明：入参两个整型，返回值为整型
+
+函数：String concat(String str1, String str2)
+签名：(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+说明：入参两个String类型，返回值为String类型
+
+[Ljava/lang/String;
+表示 String 类型的一维数组
+```
+
+回归正题，回传结果给上层
+
 
 ////////////////////////////未完待续////////////////////////////
 
