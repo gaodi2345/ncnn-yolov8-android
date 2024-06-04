@@ -308,7 +308,7 @@ JNI（Java Native Interface），是方便Java/Kotlin调用C/C++等Native代码�
 ```java
 public class Yolov8ncnn {
     static {
-        System.loadLibrary("test");
+        System.loadLibrary("yolov8ncnn");
     }
 
     public native boolean loadModel(AssetManager mgr, int model_id, int processor);
@@ -347,7 +347,7 @@ target_link_libraries(yolov8ncnn ncnn ${OpenCV_LIBS} camera2ndk mediandk)
 ```
 
 最终的cmake代码如下图：
-![微信截图_20240604101534.png](imags/微信截图_20240604101534.png)
+![微信截图_20240604135827.png](imags/微信截图_20240604135827.png)
 
 #### 5.7、Java/C/C++代码调整
 
@@ -415,7 +415,7 @@ Project“，再”Build-Refresh Linked C++ Projects“，最后关闭工程重�
 g_yolo->setNativeCallback(javaVM, input, nativeObjAddr, native_callback);
 ```
 
-以上这些，我在代码里面已经加好，注意下就可以了。
+以上这些，我在代码里面已经加好，注意下就可以了。有个值得注意的地方，在此文件的on_image_render函数，里面的注释我也写清楚了，可以根据需求选择draw和draw_fps，如果不需要，可以都注释掉，不影响后面的逻辑。
 
 #### 6.2、修改Yolo.h
 
@@ -578,6 +578,144 @@ env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
 至此，JNI产生的目标检测结果已经回调到上层，上层可以接下来就可以用回调结果处理相应的业务逻辑。但是这里只能传常见的数据类型，还有一种数据无法回传上去，那就是图像的Mat矩阵，这个到后面会介绍。
 
 ### 7、Kotlin编码
+
+#### 7.1、搭建界面布局
+
+修改 app/src/main/res/layout/[activity_main.xml](app/src/main/res/layout/activity_main.xml) 如下：
+
+![微信截图_20240604124845.png](imags/微信截图_20240604124845.png)
+
+报错的原因是没有配置此参数，在
+app/src/main/res/values/[strings.xml](app/src/main/res/values/strings.xml) 里面配置下就好了，如下：
+
+```xml
+
+<resources>
+    <string name="app_name">Test</string>
+
+    <string-array name="cpu_gpu_array">
+        <item>CPU</item>
+        <item>GPU</item>
+    </string-array>
+</resources>
+```
+
+#### 7.2、初始化Yolov8ncnn和矩阵Mat对象，懒汉模式
+
+```kotlin
+private val yolov8ncnn by lazy { Yolov8ncnn() }
+private val mat by lazy { Mat() }
+```
+
+#### 7.3、在initOnCreate中加载模型以及初始化OpenCV和SurfaceView
+
+```kotlin
+override fun initOnCreate(savedInstanceState: Bundle?) {
+    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+    OpenCVLoader.initLocal()
+
+    binding.surfaceView.holder.setFormat(PixelFormat.RGBA_8888)
+    binding.surfaceView.holder.addCallback(this)
+
+    reloadModel()
+}
+
+private fun reloadModel() {
+    val result = yolov8ncnn.loadModel(assets, currentModel, currentProcessor)
+    if (!result) {
+        Log.d(kTag, "reload: yolov8ncnn loadModel failed")
+    }
+}
+```
+
+#### 7.4、在onResume里面打开相机
+
+打开之前需要给应用授予相机的权限，否则会报错
+
+```kotlin
+override fun onResume() {
+    super.onResume()
+    if (ContextCompat.checkSelfPermission(
+            this, Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_DENIED
+    ) {
+        ActivityCompat.requestPermissions(
+            this, arrayOf(Manifest.permission.CAMERA), 100
+        )
+    }
+    yolov8ncnn.openCamera(facing)
+}
+```
+
+#### 7.5、实现SurfaceHolder.Callback回调
+
+只需要实现surfaceChanged方法，surfaceCreated和surfaceDestroyed不必管
+
+```kotlin
+override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+    yolov8ncnn.setOutputWindow(holder.surface, DetectResult(), mat.nativeObjAddr, this)
+}
+```
+
+#### 7.6、实现INativeCallback回调
+
+```kotlin
+override fun onDetect(output: ArrayList<DetectResult>) {
+    Log.d(kTag, output.toJson())
+    binding.detectView.updateTargetPosition(output)
+    if (mat.width() > 0 || mat.height() > 0) {
+        val bitmap = Bitmap.createBitmap(mat.width(), mat.height(), Bitmap.Config.ARGB_8888)
+        Utils.matToBitmap(mat, bitmap, true)
+        bitmap.saveImage("${createImageFileDir()}/${System.currentTimeMillis()}.png")
+    } else {
+        Log.d(kTag, "width: ${mat.width()}, height: ${mat.height()}")
+    }
+}
+```
+
+此时detectView会报错，因为这是个自定义控件，可先注释掉，后面再说。
+
+这里还有个隐藏的细节，那就是mat，哪来的值？
+
+setOutputWindow里面有个入参，mat.nativeObjAddr，这个是Java/Kotlin层通过JNI往C++传入内存地址（可以理解为指针），然后在在 [yolo.cpp](app/src/main/cpp/yolo.cpp)
+里面给此指针赋值，那么，这样就实现了Mat矩阵数据回传的效果。 在 int Yolo::detect(const cv::Mat &rgb,
+std::vector<Object> &objects, float prob_threshold,
+float nms_threshold) 的 return 前面加上如下代码：
+
+```cpp
+    auto *res = (cv::Mat *) j_mat_addr;
+    res->create(rgb.rows, rgb.cols, rgb.type());
+    memcpy(res->data, rgb.data, rgb.rows * rgb.step);
+```
+
+#### 7.7、在onPause里面关闭相机
+
+```kotlin
+override fun onPause() {
+    super.onPause()
+    yolov8ncnn.closeCamera()
+}
+```
+
+自此，ncnn + yolov8 + opencv 这三个框架已完成在Android端的移植。将报错的地方先注释掉
+
+```kotlin
+// binding.detectView.updateTargetPosition(output)
+```
+
+* 运行起来的效果如下：
+
+![20240604140816.png](imags/20240604140816.png)
+
+* 结果回调：
+
+![微信截图_20240604141117.png](imags/微信截图_20240604141117.png)
+
+* Mat矩阵转PNG结果：
+  ![微信截图_20240604141334.png](imags/微信截图_20240604141334.png)
+
+#### 7.8、实现自定义控件
 
 ////////////////////////////未完待续////////////////////////////
 
