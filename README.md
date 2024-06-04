@@ -387,9 +387,9 @@ Project“，再”Build-Refresh Linked C++ Projects“，最后关闭工程重�
  javaVM = vm;
 ```
 
-*
+* 修改Java_com_casic_test_Yolov8ncnn_loadModel方法（注意自己的包名）
 
-修改Java_com_casic_test_Yolov8ncnn_loadModel方法（注意自己的包名），将model_types、target_sizes、mean_values、norm_values改为如下代码：
+将model_types、target_sizes、mean_values、norm_values改为如下代码：
 
 ```cpp
     const char *model_types[] = {"s-detect-sim-opt-fp16"};
@@ -405,7 +405,7 @@ Project“，再”Build-Refresh Linked C++ Projects“，最后关闭工程重�
     };
 ```
 
-其中model_types里面的值你是你yolov8模型去掉前缀以及后缀剩下的部分，比如：yolov8s-detect-sim-opt-fp16.bin
+其中model_types里面的值是你yolov8模型去掉前缀以及后缀剩下的部分，比如：yolov8**s-detect-sim-opt-fp16**.bin
 的值应该是 s-detect-sim-opt-fp16，一定要注意，否则会报错，找不到模型。
 
 * 修改Java_com_casic_test_Yolov8ncnn_setOutputWindow方法（同样注意包名），在return前面加一行代码：
