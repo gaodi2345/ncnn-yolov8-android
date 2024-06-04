@@ -291,11 +291,11 @@ implementation project(':sdk')
 
 ### 4、导入自研yolov8的模型
 
-在 app 的 main 目录下新建 assets 文件夹（一定要这个名字，别自己另辟蹊径），将Python导出的yolov8模型（后缀是 *.bin 和 *.param，如果不是这俩后缀的自行查找解决方案）复制进去即可。暂时先不用管，备用。
+在 app 的 main 目录下新建 assets
+文件夹（一定要这个名字，别自己另辟蹊径），将Python导出的yolov8模型（后缀是 *.bin 和 *
+.param，如果不是这俩后缀的自行查找解决方案）复制进去即可。暂时先不用管，备用。
 
-### 5、JNI编程
-
-此模块需要有能看懂的C/C++代码的的能力，以及非常熟练的使用Kotlin/Java的能力。
+### 5、JNI配置
 
 #### 5.1、什么是JNI？
 
@@ -350,6 +350,7 @@ target_link_libraries(yolov8ncnn ncnn ${OpenCV_LIBS} camera2ndk mediandk)
 ![微信截图_20240604101534.png](imags/微信截图_20240604101534.png)
 
 #### 5.7、Java/C/C++代码调整
+
 复制过去的yolov8ncnn.cpp文件，有四个函数一定是没有高亮的，如下图：
 
 ![微信截图_20240604101848.png](imags/微信截图_20240604101848.png)
@@ -367,6 +368,55 @@ target_link_libraries(yolov8ncnn ncnn ${OpenCV_LIBS} camera2ndk mediandk)
 
 如果没有出现以上效果的，先点击”Sync Now“，再”Build-Clean Project“，再”Build-Rebuild
 Project“，再”Build-Refresh Linked C++ Projects“，最后关闭工程重新启动Android Studio，此时应该就没问题了。
+
+### 6、JNI编码
+
+此模块需要有能看懂的C/C++代码的的能力，以及非常熟练的使用Kotlin/Java的能力。
+
+#### 6.1、修改yolov8ncnn.cpp
+
+* 定义全局指针变量
+
+```cpp
+ static JavaVM *javaVM = nullptr;
+```
+
+* 修改JNI_OnLoad方法，在相机初始化之前添加一行如下代码：
+
+```cpp
+ javaVM = vm;
+```
+
+*
+
+修改Java_com_casic_test_Yolov8ncnn_loadModel方法（注意自己的包名），将model_types、target_sizes、mean_values、norm_values改为如下代码：
+
+```cpp
+    const char *model_types[] = {"s-detect-sim-opt-fp16"};
+
+    const int target_sizes[] = {320, 320, 320};
+
+    const float mean_values[][3] = {
+            {103.53f, 116.28f, 123.675f}
+    };
+
+    const float norm_values[][3] = {
+            {1 / 255.f, 1 / 255.f, 1 / 255.f}
+    };
+```
+
+其中model_types里面的值你是你yolov8模型去掉前缀以及后缀剩下的部分，比如：yolov8s-detect-sim-opt-fp16.bin
+的值应该是 s-detect-sim-opt-fp16，一定要注意，否则会报错，找不到模型。
+
+* 修改Java_com_casic_test_Yolov8ncnn_setOutputWindow方法（同样注意包名），在return前面加一行代码：
+
+```cpp
+g_yolo->setNativeCallback(javaVM, input, nativeObjAddr, native_callback);
+```
+
+以上这些，我在代码里面已经加好，注意下就可以了。
+
+#### 6.2、修改Yolo.h
 
 ////////////////////////////未完待续////////////////////////////
 
