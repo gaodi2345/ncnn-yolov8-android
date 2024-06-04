@@ -291,7 +291,7 @@ implementation project(':sdk')
 
 ### 4、导入自研yolov8的模型
 
-在 app 的 main 目录下新建 assets 文件夹（一定要这个名字，别自己另辟蹊径），将Python导出的yolov8模型复制进去即可。暂时先不用管，备用。
+在 app 的 main 目录下新建 assets 文件夹（一定要这个名字，别自己另辟蹊径），将Python导出的yolov8模型（后缀是 *.bin 和 *.param）复制进去即可。暂时先不用管，备用。
 
 ### 5、JNI编程
 
