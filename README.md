@@ -230,7 +230,7 @@ project根据实际情况修改即可，然后点击”Sync Now“
 
 #### 3.3、集成opencv-mobile框架
 
-同理，先去[opencv-mobile](https://objects.githubusercontent.com/github-production-release-asset-2e65be/327885181/315e5f06-4555-4466-83e7-a8efb5a8200c?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=releaseassetproduction%2F20240603%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20240603T101806Z&X-Amz-Expires=300&X-Amz-Signature=35ce52016d06efbff0f8050f56fd126fdb4fa53d0c74e0d23f45be7e9e367bde&X-Amz-SignedHeaders=host&actor_id=20377551&key_id=0&repo_id=327885181&response-content-disposition=attachment%3B%20filename%3Dopencv-mobile-2.4.13.7-android.zip&response-content-type=application%2Foctet-stream)
+同理，先去[opencv-mobile](https://objects.githubusercontent.com/github-production-release-asset-2e65be/327885181/315e5f06-4555-4466-83e7-a8efb5a8200c?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=releaseassetproduction/20240603/us-east-1/s3/aws4_request&X-Amz-Date=20240603T101806Z&X-Amz-Expires=300&X-Amz-Signature=35ce52016d06efbff0f8050f56fd126fdb4fa53d0c74e0d23f45be7e9e367bde&X-Amz-SignedHeaders=host&actor_id=20377551&key_id=0&repo_id=327885181&response-content-disposition=attachment%3B%20filename%3Dopencv-mobile-2.4.13.7-android.zip&response-content-type=application/octet-stream)
 下载框架，如图：
 
 ![微信截图_20240603181800.png](imags/微信截图_20240603181800.png)
@@ -250,7 +250,43 @@ find_package(OpenCV REQUIRED core imgproc)
 
 #### 3.4、集成OpenCV框架
 
-这里的OpenCV和3.3里面的opencv-mobile是有区别的，opencv-mobile是专门针对移动端做了优化。此处引入OpenCV的目的是为了后面的画面预览的数据矩阵。
+这里的OpenCV和3.3里面的opencv-mobile是有区别的，opencv-mobile是专门针对移动端做了优化。此处引入OpenCV的目的是为了后面的画面预览的数据矩阵。同样去[OpenCV](https://objects.githubusercontent.com/github-production-release-asset-2e65be/5108051/eb6f2dc7-a522-4eec-92e5-264bf23fc9c1?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=releaseassetproduction/20240604/us-east-1/s3/aws4_request&X-Amz-Date=20240604T003102Z&X-Amz-Expires=300&X-Amz-Signature=72dae75af31861576e4e180beb484b496e82db395008de7082a583dd189917c1&X-Amz-SignedHeaders=host&actor_id=20377551&key_id=0&repo_id=5108051&response-content-disposition=attachment%3B%20filename%3Dopencv-4.9.0-android-sdk.zip&response-content-type=application/octet-stream)
+官网下载最新的Android端SDK，如下图：
+
+![微信截图_20240604083058.png](imags/微信截图_20240604083058.png)
+
+然后解压在桌面备用，按如下步骤操作：
+
+![QQ截图20240604083401.png](imags/QQ截图20240604083401.png)
+
+![微信截图_20240604083549.png](imags/微信截图_20240604083549.png)
+
+导入进去之后会报错，别慌，按下面步骤修改即可，如图：
+
+首先修改app目录下面的[build.gradle](app/build.gradle)，在dependencies括号里面添加一行代码，如下图：
+
+```gradle
+implementation project(':sdk')
+```
+
+这里的”sdk“就是刚刚导入进来的OpenCV依赖库的名字，如果按照我的步骤来没有改过名字的应该就是这个，如果自己改过名字的，这里填写你改过的依赖库名字。
+
+然后再修改sdk里面的[build.gradle](sdk/build.gradle)，删掉其中的如下代码：
+
+```gradle
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
+```
+
+最后在主界面点击”Try Again“即可完成OpenCV的集成，最后效果如下：
+
+![微信截图_20240604084455.png](imags/微信截图_20240604084455.png)
+
+到此，三大框架集成完毕，接下来开始实现JNI逻辑。
 
 ////////////////////////////未完待续////////////////////////////
 
