@@ -526,8 +526,58 @@ void Yolo::setNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, job
 表示 String 类型的一维数组
 ```
 
-回归正题，回传结果给上层
+回归正题，回传结果给上层，理清步骤就很简单，用过Java反射的这里理解起来应该不难
 
+1. 获取Java代码的回调接口，得到回调接口的jclass
+
+```cpp
+    JNIEnv *env;
+    javaVM->AttachCurrentThread(&env, nullptr);
+    jclass callback_clazz = env->GetObjectClass(j_callback);
+    jclass output_clazz = env->GetObjectClass(j_output);
+```
+
+注意：JNIEnv不支持跨线程，所以必须通过之前定义的全局指针变量 javaVM 得到当前线程的JNIEnv。
+
+2. 获取Java代码的回调接口里面的入参，得到回调入参的jclass
+
+```cpp
+    jclass output_clazz = env->GetObjectClass(j_output);
+```
+
+3. 根据或取到的jclass获取接口回调方法名，得到jmethodID
+
+```cpp
+jmethodID j_method_id = env->GetMethodID(callback_clazz, "onDetect", "(Ljava/util/ArrayList;)V");
+```
+
+4. 给回调入参的jobject设置值。此处只举个复杂点例子，基本类型的很简单就不展示了，具体返回值要看自己的逻辑
+
+```cpp
+        jfieldID position = env->GetFieldID(output_clazz, "position", "[F");
+        float array[4];
+        array[0] = item.rect.x;
+        array[1] = item.rect.y;
+        array[2] = item.rect.width;
+        array[3] = item.rect.height;
+        jfloatArray rectArray = env->NewFloatArray(4);
+        env->SetFloatArrayRegion(rectArray, 0, 4, array);
+        env->SetObjectField(j_output, position, rectArray);
+```
+
+上面的代码意思是给float[]赋值，从签名”[F“可以看出来
+
+5. 发起回调
+
+回调就很简单了，看清参数含义就行。意思就是在什么类里面调用什么方法，填入什么值
+
+```cpp
+env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
+```
+
+至此，JNI产生的目标检测结果已经回调到上层，上层可以接下来就可以用回调结果处理相应的业务逻辑。但是这里只能传常见的数据类型，还有一种数据无法回传上去，那就是图像的Mat矩阵，这个到后面会介绍。
+
+### 7、Kotlin编码
 
 ////////////////////////////未完待续////////////////////////////
 
