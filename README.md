@@ -10,7 +10,7 @@
 
 如题，采用 ncnn + yolov8 + opencv 三个框架实现这一目标
 
-### 3、接下来详细介绍如何将这三个框架移植到Android端
+### 3、集成三个框架移植到Android端
 
 #### 3.1、Android Studio 新建C++项目
 
@@ -271,7 +271,8 @@ implementation project(':sdk')
 
 这里的”sdk“就是刚刚导入进来的OpenCV依赖库的名字，如果按照我的步骤来没有改过名字的应该就是这个，如果自己改过名字的，这里填写你改过的依赖库名字。
 
-然后再修改sdk里面的[build.gradle](sdk/build.gradle)，删掉其中的如下代码：
+然后再修改sdk里面的[build.gradle](sdk/build.gradle)
+，将里面的compileSdkVersion、minSdkVersion和targetSdkVersion三个字段改为了主项目一致，并删掉其中的如下代码：
 
 ```gradle
     publishing {
@@ -286,7 +287,85 @@ implementation project(':sdk')
 
 ![微信截图_20240604084455.png](imags/微信截图_20240604084455.png)
 
-到此，三大框架集成完毕，接下来开始实现JNI逻辑。
+到此，三大框架集成完毕。
+
+### 4、导入自研yolov8的模型
+
+在 app 的 main 目录下新建 assets 文件夹（一定要这个名字，别自己另辟蹊径），将Python导出的yolov8模型复制进去即可。暂时先不用管，备用。
+
+### 5、JNI编程
+
+此模块需要有能看懂的C/C++代码的的能力，以及非常熟练的使用Kotlin/Java的能力。
+
+#### 5.1、什么是JNI？
+
+JNI（Java Native Interface），是方便Java/Kotlin调用C/C++等Native代码封装的一层接口。简单来说就是Java/Kotlin与C/C++沟通的桥梁。
+
+#### 5.2、新建 [Yolov8ncnn.java](ap/src/main/java/com/pengxh/ncnn/yolov8/Yolov8ncnn.java)
+
+在 **app/src/main/java/自己的包名** 目录下新建 Yolov8ncnn.java（Yolov8ncnn.kt 也是可以的），代码如下：
+
+```java
+public class Yolov8ncnn {
+    static {
+        System.loadLibrary("test");
+    }
+
+    public native boolean loadModel(AssetManager mgr, int model_id, int processor);
+
+    public native boolean openCamera(int facing);
+
+    public native boolean closeCamera();
+
+    public native boolean setOutputWindow(Surface surface, DetectResult input, long nativeObjAddr, INativeCallback nativeCallback);
+}
+```
+
+static（Kotlin里面是companion
+object，伴生对象）包裹的代码意思是C/C++代码编译之后动态链接库的名字（此时还没有，因为还没有添加C/C++代码）。另外四个方法和普通的Java方法的区别在于全部都有native关键字修饰（Kotlin里面是external），表明这几个方法需要调用C/C++代码，也就是前文提到的”桥梁“。此时代码会报错，是因为还没有在C/C++里面实现它们，先不用管。
+
+#### 5.3、将本项目的 [ndkcamera.cpp](app/src/main/cpp/ndkcamera.cpp) 和 [ndkcamera.h](app/src/main/cpp/ndkcamera.h) 复制到自己项目
+
+这是底层相机相关的代码逻辑，包括相机打开、关闭、预览、数据回调等，通用代码，无需修改。此时会爆一堆错误提示，别慌，先不用管。
+
+#### 5.4、将本项目的 [yolo.cpp](app/src/main/cpp/yolo.cpp) 和 [yolo.h](app/src/main/cpp/yolo.h) 复制到自己项目
+
+这两代码文件主要的功能是对相机预览产生的nv21数据进行处理，包括nv21转换、nv21转Mat矩阵、图像裁剪、灰度处理、调用模型检测目标、显示检测结果、回调等一些列操作，底层逻辑就在此实现。此时依旧会爆一堆错误提示，别慌，先不用管。
+
+#### 5.5、将本项目的 [yolov8ncnn.cpp](app/src/main/cpp/yolov8ncnn.cpp) 复制到自己项目
+
+此代码文件主要包括相机初始化，参数初始化。整体来说就是各种初始化。
+
+#### 5.6、修改 app/src/main/cpp 目录下的 [CMakeLists.txt](app/src/main/cpp/CMakeLists.txt)
+
+添加如下两行代码：
+
+```cmake
+add_library(yolov8ncnn SHARED yolov8ncnn.cpp yolo.cpp ndkcamera.cpp)
+
+target_link_libraries(yolov8ncnn ncnn ${OpenCV_LIBS} camera2ndk mediandk)
+```
+
+最终的cmake代码如下图：
+![微信截图_20240604101534.png](imags/微信截图_20240604101534.png)
+
+复制过去的文件，有四个函数一定是没有高亮的，如下图：
+
+![微信截图_20240604101848.png](imags/微信截图_20240604101848.png)
+
+此时需要将此函数根据情况修改为自己项目包名+函数名的方式，”.“用”_
+“d代替，比如：com.casic.test.Yolov8ncnn应改为Java_com_casic_test_Yolov8ncnn，改为之后就会发现，这四个函数已经高亮了，说明桥接代码已经生效。
+
+* Java
+  ![微信截图_20240604093515.png](imags/微信截图_20240604093515.png)
+
+* Cpp
+  ![微信截图_20240604101047.png](imags/微信截图_20240604101047.png)
+
+可以看到Java和C++代码左侧已经出现相对应的代码标识。另外还有两个文件，就是setOutputWindow方法里面的DetectResult和INativeCallback，这俩都属于回调部分的代码，一个是数据模型类，一个是回调接口，直接复制即可。
+
+如果没有出现以上效果的，先点击”Sync Now“，再”Build-Clean Project“，再”Build-Rebuild
+Project“，再”Build-Refresh Linked C++ Projects“，最后关闭工程重新启动Android Studio，此时应该就没问题了。
 
 ////////////////////////////未完待续////////////////////////////
 
