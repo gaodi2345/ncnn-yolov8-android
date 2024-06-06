@@ -39,7 +39,7 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
                 ) {
                     if (position != currentProcessor) {
                         currentProcessor = position
-                        loadModelFromAssets(0)
+                        loadModelFromAssets(1)
                     }
                 }
 
@@ -65,7 +65,7 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         binding.surfaceView.holder.setFormat(PixelFormat.RGBA_8888)
         binding.surfaceView.holder.addCallback(this)
 
-        loadModelFromAssets(0)
+        loadModelFromAssets(1)
     }
 
     override fun initViewBinding(): ActivityMainBinding {

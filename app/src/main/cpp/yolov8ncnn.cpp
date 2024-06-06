@@ -122,15 +122,15 @@ void MyNdkCamera::on_image_render(cv::Mat &rgb) const {
         ncnn::MutexLockGuard g(lock);
 
         if (g_yolo) {
-            g_yolo->classify(rgb);
+//            g_yolo->classify(rgb);
 
             std::vector<Object> objects;
 
 //            g_yolo->partition(rgb);
 
-//            g_yolo->detect(rgb, objects);
+            g_yolo->detect(rgb, objects);
 
-            g_yolo->draw(rgb, objects);
+//            g_yolo->draw(rgb, objects);
         } else {
             draw_unsupported(rgb);
         }
