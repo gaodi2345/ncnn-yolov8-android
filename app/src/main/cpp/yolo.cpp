@@ -17,7 +17,9 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
-#include <algorithm>
+using namespace std;
+
+#include <iomanip>
 
 #include "cpu.h"
 
@@ -260,6 +262,8 @@ Yolo::load(AAssetManager *mgr, const char *model_type, int _target_size, const f
 }
 
 int Yolo::classify(const cv::Mat &rgb) {
+    static const float scale_values[3] = {0.017f, 0.017f, 0.017f};
+
     int width = rgb.cols;
     int height = rgb.rows;
 
@@ -281,11 +285,6 @@ int Yolo::classify(const cv::Mat &rgb) {
             float_buffer[j] = out[j];
         }
 
-        //找出最大值的下标
-//        int max_index = std::max_element(
-//                output_buffer, output_buffer + output_size
-//        ) - output_buffer;
-//        float char_buffer[output_size];
 
         /**
          * 回调给Java/Kotlin层
@@ -293,16 +292,10 @@ int Yolo::classify(const cv::Mat &rgb) {
         JNIEnv *env;
         javaVM->AttachCurrentThread(&env, nullptr);
         jclass callback_clazz = env->GetObjectClass(j_callback);
-        jmethodID j_method_id = env->GetMethodID(
-                callback_clazz, "onClassify", "([F)V"
-        );
+        jmethodID j_method_id = env->GetMethodID(callback_clazz, "onClassify", "([F)V");
 
         jfloatArray j_output_Data = env->NewFloatArray(output_size);
         env->SetFloatArrayRegion(j_output_Data, 0, output_size, float_buffer);
-
-//        jfieldID j_type = env->GetFieldID(callback_clazz, "type", "Ljava/lang/String;");
-
-//        env->SetCharArrayRegion(j_output, j_type, class_values[max_index]);
 
         env->CallVoidMethod(j_callback, j_method_id, j_output_Data);
     }
@@ -473,7 +466,7 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
     return 0;
 }
 
-void Yolo::setNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, jobject pJobject) {
+void Yolo::initNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, jobject pJobject) {
     javaVM = vm;
 
     /**

@@ -7,7 +7,6 @@ public interface INativeCallback {
      * 分类
      */
     void onClassify(float[] possibles);
-//    void onClassify(float[] possibles, String result);
 
     /**
      * 检测

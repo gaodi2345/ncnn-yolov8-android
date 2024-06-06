@@ -394,7 +394,7 @@ Project“，再”Build-Refresh Linked C++ Projects“，最后关闭工程重�
 ```cpp
     const char *model_types[] = {"s-detect-sim-opt-fp16"};
 
-    const int target_sizes[] = {320, 320, 320};
+    const int target_sizes[] = {320};
 
     const float mean_values[][3] = {
             {103.53f, 116.28f, 123.675f}
@@ -412,7 +412,7 @@ Project“，再”Build-Refresh Linked C++ Projects“，最后关闭工程重�
 * 修改Java_com_casic_test_Yolov8ncnn_setOutputWindow方法（同样注意包名），在return前面加一行代码：
 
 ```cpp
-g_yolo->setNativeCallback(javaVM, input, nativeObjAddr, native_callback);
+g_yolo->initNativeCallback(javaVM, input, nativeObjAddr, native_callback);
 ```
 
 以上这些，我在代码里面已经加好，注意下就可以了。有个值得注意的地方，在此文件的on_image_render函数，里面的注释我也写清楚了，可以根据需求选择draw和draw_fps，如果不需要，可以都注释掉，不影响后面的逻辑。
@@ -434,7 +434,7 @@ g_yolo->setNativeCallback(javaVM, input, nativeObjAddr, native_callback);
 * 添加Java/C++初始化函数
 
 ```cpp
-void setNativeCallback(JavaVM *vm, jobject result, jlong nativeObjAddr, jobject pJobject);
+void initNativeCallback(JavaVM *vm, jobject result, jlong nativeObjAddr, jobject pJobject);
 ```
 
 #### 6.3、修改Yolo.cpp
@@ -450,7 +450,7 @@ const int num_class = 43;
 * 实现自己在Yolo.h里面定义的setNativeCallback函数
 
 ```cpp
-void Yolo::setNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, jobject pJobject) {
+void Yolo::initNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, jobject pJobject) {
     javaVM = vm;
 
     /**

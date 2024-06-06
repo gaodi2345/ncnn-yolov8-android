@@ -190,10 +190,6 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadModel(JNIEnv *env, jobject thiz, jobj
             {1 / 255.f, 1 / 255.f, 1 / 255.f}
     };
 
-    const float scale_values[3] = {0.017f, 0.017f, 0.017f};
-
-    const char *class_values[] = {"电线整洁", "电线杂乱", "餐馆厨房"};
-
     const char *model_type = model_types[(int) model_id];
     int target_size = target_sizes[(int) model_id];
     bool use_gpu = (int) processor == 1;
@@ -251,7 +247,7 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_setOutputWindow(JNIEnv *env, jobject thiz
 
     g_camera->set_window(win);
 
-    g_yolo->setNativeCallback(javaVM, input, nativeObjAddr, native_callback);
+    g_yolo->initNativeCallback(javaVM, input, nativeObjAddr, native_callback);
     return JNI_TRUE;
 }
 }

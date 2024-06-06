@@ -47,7 +47,7 @@ public:
              const float *norm_values,
              bool use_gpu = false);
 
-    void setNativeCallback(JavaVM *vm, jobject result, jlong nativeObjAddr, jobject pJobject);
+    void initNativeCallback(JavaVM *vm, jobject result, jlong nativeObjAddr, jobject pJobject);
 
     /**
      * 分类
@@ -77,8 +77,6 @@ private:
     int target_size;
     float mean_values[3];
     float norm_values[3];
-    float scale_values[3];
-    char class_values[3];
     ncnn::UnlockedPoolAllocator blob_pool_allocator;
     ncnn::PoolAllocator workspace_pool_allocator;
 

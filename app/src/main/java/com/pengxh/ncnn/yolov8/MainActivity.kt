@@ -79,15 +79,22 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         yolov8ncnn.setOutputWindow(holder.surface, DetectResult(), mat.nativeObjAddr, this)
     }
 
+    private val classArray = arrayOf("电线整洁", "电线杂乱", "餐馆厨房")
+
     override fun onClassify(possibles: FloatArray) {
 //        loadModelFromAssets(1)
-        Log.d(kTag, possibles.contentToString())
-    }
 
-//    override fun onClassify(possibles: FloatArray, result: String) {
-////        loadModelFromAssets(1)
-//        Log.d(kTag, "${possibles.contentToString()} - $result")
-//    }
+        //找出最大值的下标
+        var max = possibles[0]
+        var maxIndex = 0
+        possibles.forEachIndexed { index, fl ->
+            if (fl > max) {
+                max = fl
+                maxIndex = index
+            }
+        }
+        Log.d(kTag, "${possibles.contentToString()} - ${classArray[maxIndex]}")
+    }
 
     override fun onDetect(output: ArrayList<DetectResult>) {
         binding.detectView.updateTargetPosition(output)
