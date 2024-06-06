@@ -123,12 +123,12 @@ void MyNdkCamera::on_image_render(cv::Mat &rgb) const {
 
         if (g_yolo) {
             //分类
-            g_yolo->classify(rgb);
-
-            std::vector<Object> objects;
+//            g_yolo->classify(rgb);
 
             //分割
             g_yolo->partition(rgb);
+
+            std::vector<Object> objects;
 
             //检测
             g_yolo->detect(rgb, objects);

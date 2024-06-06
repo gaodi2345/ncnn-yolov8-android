@@ -17,8 +17,6 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
-using namespace std;
-
 #include <iomanip>
 
 #include "cpu.h"
@@ -305,7 +303,35 @@ int Yolo::classify(const cv::Mat &rgb) {
 
 int Yolo::partition(const cv::Mat &rgb) {
     if (state == 1) {
+        int width = rgb.cols;
+        int height = rgb.rows;
 
+        //把opencv Mat转为 ncnn Mat
+        ncnn::Mat in = ncnn::Mat::from_pixels(rgb.data, ncnn::Mat::PIXEL_RGB2BGR, width, height);
+
+        in.substract_mean_normalize(mean_values, norm_values);
+        ncnn::Extractor ex = yolo.create_extractor();
+
+        ex.input("images", in);
+
+        ncnn::Mat out;
+        ex.extract("output", out);
+
+        cv::Mat mask(out.h, out.w, CV_8UC1);
+        const float *probMap = out.channel(0);
+        const float *probMap1 = out.channel(1);
+
+        for (int i{0}; i < out.h; i++) {
+            for (int j{0}; j < out.w; ++j) {
+                mask.at<uchar>(i, j) = probMap1[i * out.w + j] < probMap[i * out.w + j] ? 255 : 0;
+            }
+        }
+        cv::resize(mask, mask, cv::Size(rgb.cols, rgb.rows), 0, 0);
+        cv::Mat segFrame;
+        cv::bitwise_and(rgb, rgb, segFrame, mask);
+
+        // 将 segFrame 的内容赋值回 rgb
+        segFrame.copyTo(rgb);
     }
     return 0;
 }

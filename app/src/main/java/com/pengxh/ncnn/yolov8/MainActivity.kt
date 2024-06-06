@@ -68,6 +68,9 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         binding.surfaceView.holder.addCallback(this)
 
         loadModelFromAssets(0)
+
+        //TODO
+        yolov8ncnn.updateYoloState(YoloStateConst.PARTITION)
     }
 
     override fun initViewBinding(): ActivityMainBinding {
