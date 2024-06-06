@@ -34,6 +34,16 @@ class Yolo {
 public:
     Yolo();
 
+    /**
+     * Yolo当前状态
+     * <br>------------------------------<br>
+     * 0 - 分类
+     * 1 - 分割
+     * 2 - 检测
+     * 3 - 绘制
+     * */
+    int state = 0;
+
     int load(const char *model_type,
              int target_size,
              const float *mean_values,

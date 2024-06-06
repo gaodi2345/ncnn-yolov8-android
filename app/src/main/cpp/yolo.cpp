@@ -262,28 +262,142 @@ Yolo::load(AAssetManager *mgr, const char *model_type, int _target_size, const f
 }
 
 int Yolo::classify(const cv::Mat &rgb) {
-    static const float scale_values[3] = {0.017f, 0.017f, 0.017f};
+    if (state == 0) {
+        static const float scale_values[3] = {0.017f, 0.017f, 0.017f};
 
-    int width = rgb.cols;
-    int height = rgb.rows;
+        int width = rgb.cols;
+        int height = rgb.rows;
 
-    //把opencv Mat转为 ncnn Mat
-    ncnn::Mat in = ncnn::Mat::from_pixels(rgb.data, ncnn::Mat::PIXEL_RGB2BGR, width, height);
+        //把opencv Mat转为 ncnn Mat
+        ncnn::Mat in = ncnn::Mat::from_pixels(rgb.data, ncnn::Mat::PIXEL_RGB2BGR, width, height);
 
-    std::vector<float> cls_scores;
-    {
-        in.substract_mean_normalize(mean_values, scale_values);
+        std::vector<float> cls_scores;
+        {
+            in.substract_mean_normalize(mean_values, scale_values);
+            ncnn::Extractor ex = yolo.create_extractor();
+            ex.input("images", in);
+
+            ncnn::Mat out;
+            ex.extract("output", out);
+
+            int output_size = out.w;
+            float float_buffer[output_size];
+            for (int j = 0; j < out.w; j++) {
+                float_buffer[j] = out[j];
+            }
+
+            /**
+             * 回调给Java/Kotlin层
+             * */
+            JNIEnv *env;
+            javaVM->AttachCurrentThread(&env, nullptr);
+            jclass callback_clazz = env->GetObjectClass(j_callback);
+            jmethodID j_method_id = env->GetMethodID(callback_clazz, "onClassify", "([F)V");
+
+            jfloatArray j_output_Data = env->NewFloatArray(output_size);
+            env->SetFloatArrayRegion(j_output_Data, 0, output_size, float_buffer);
+
+            env->CallVoidMethod(j_callback, j_method_id, j_output_Data);
+        }
+    }
+    return 0;
+}
+
+int Yolo::partition(const cv::Mat &rgb) {
+    if (state == 1) {
+
+    }
+    return 0;
+}
+
+int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_threshold,
+                 float nms_threshold) {
+    if (state == 2) {
+        int width = rgb.cols;
+        int height = rgb.rows;
+
+        // pad to multiple of 32
+        int w = width;
+        int h = height;
+        float scale = 1.f;
+        if (w > h) {
+            scale = (float) target_size / w;
+            w = target_size;
+            h = h * scale;
+        } else {
+            scale = (float) target_size / h;
+            h = target_size;
+            w = w * scale;
+        }
+
+        ncnn::Mat in = ncnn::Mat::from_pixels_resize(
+                rgb.data, ncnn::Mat::PIXEL_RGB2BGR, width, height, w, h
+        );
+
+        // pad to target_size rectangle
+        int w_pad = (w + 31) / 32 * 32 - w;
+        int h_pad = (h + 31) / 32 * 32 - h;
+        ncnn::Mat in_pad;
+        ncnn::copy_make_border(
+                in, in_pad, h_pad / 2, h_pad - h_pad / 2, w_pad / 2,
+                w_pad - w_pad / 2,
+                ncnn::BORDER_CONSTANT, 0.f
+        );
+
+        in_pad.substract_mean_normalize(0, norm_values);
+
         ncnn::Extractor ex = yolo.create_extractor();
-        ex.input("images", in);
+
+        ex.input("images", in_pad);
+
+        std::vector<Object> proposals;
 
         ncnn::Mat out;
         ex.extract("output", out);
 
-        int output_size = out.w;
-        float float_buffer[output_size];
-        for (int j = 0; j < out.w; j++) {
-            float_buffer[j] = out[j];
+        std::vector<int> strides = {8, 16, 32}; // might have stride=64
+        std::vector<GridAndStride> grid_strides;
+        generate_grids_and_stride(in_pad.w, in_pad.h, strides, grid_strides);
+        generate_proposals(grid_strides, out, prob_threshold, proposals);
+
+        // sort all proposals by score from highest to lowest
+        qsort_descent_inplace(proposals);
+
+        // apply nms with nms_threshold
+        std::vector<int> picked;
+        nms_sorted_bboxes(proposals, picked, nms_threshold);
+
+        int count = picked.size();
+
+        objects.resize(count);
+        for (int i = 0; i < count; i++) {
+            objects[i] = proposals[picked[i]];
+
+            // adjust offset to original unpadded
+            float x0 = (objects[i].rect.x - (w_pad / 2)) / scale;
+            float y0 = (objects[i].rect.y - (h_pad / 2)) / scale;
+            float x1 = (objects[i].rect.x + objects[i].rect.width - (w_pad / 2)) / scale;
+            float y1 = (objects[i].rect.y + objects[i].rect.height - (h_pad / 2)) / scale;
+
+            // clip
+            x0 = std::max(std::min(x0, (float) (width - 1)), 0.f);
+            y0 = std::max(std::min(y0, (float) (height - 1)), 0.f);
+            x1 = std::max(std::min(x1, (float) (width - 1)), 0.f);
+            y1 = std::max(std::min(y1, (float) (height - 1)), 0.f);
+
+            objects[i].rect.x = x0;
+            objects[i].rect.y = y0;
+            objects[i].rect.width = x1 - x0;
+            objects[i].rect.height = y1 - y0;
         }
+
+        // sort objects by area
+        struct {
+            bool operator()(const Object &a, const Object &b) const {
+                return a.rect.area() > b.rect.area();
+            }
+        } objects_area_greater;
+        std::sort(objects.begin(), objects.end(), objects_area_greater);
 
         /**
          * 回调给Java/Kotlin层
@@ -291,177 +405,73 @@ int Yolo::classify(const cv::Mat &rgb) {
         JNIEnv *env;
         javaVM->AttachCurrentThread(&env, nullptr);
         jclass callback_clazz = env->GetObjectClass(j_callback);
-        jmethodID j_method_id = env->GetMethodID(callback_clazz, "onClassify", "([F)V");
+        jclass output_clazz = env->GetObjectClass(j_output);
+        /**
+         * I: 整数类型（int）
+         * J: 长整数类型（long）
+         * D: 双精度浮点数类型（double）
+         * F: 单精度浮点数类型（float）
+         * Z: 布尔类型（boolean）
+         * C: 字符类型（char）
+         * B: 字节类型（byte）
+         * S: 短整数类型（short）
+         * <br>-----------------------------------------------<br>
+         * Ljava/lang/Object;: 表示 Object 类型的引用
+         * Ljava/lang/String;: 表示 String 类型的引用
+         * L包名/类名;: 表示特定包名和类名的引用
+         * <br>-----------------------------------------------<br>
+         * 例如：
+         * int add(int a, int b): (II)I
+         *
+         * String concat(String str1, String str2): (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+         * <br>-----------------------------------------------<br>
+         * [Ljava/lang/String;: 表示 String 类型的一维数组
+         * */
+        jmethodID j_method_id = env->GetMethodID(
+                callback_clazz, "onDetect", "(Ljava/util/ArrayList;)V"
+        );
 
-        jfloatArray j_output_Data = env->NewFloatArray(output_size);
-        env->SetFloatArrayRegion(j_output_Data, 0, output_size, float_buffer);
+        //获取ArrayList类
+        jclass list_clazz = env->FindClass("java/util/ArrayList");
+        jmethodID arraylist_init = env->GetMethodID(list_clazz, "<init>", "()V");
+        jmethodID arraylist_add = env->GetMethodID(list_clazz, "add", "(Ljava/lang/Object;)Z");
+        //初始化ArrayList对象
+        jobject arraylist_obj = env->NewObject(list_clazz, arraylist_init);
 
-        env->CallVoidMethod(j_callback, j_method_id, j_output_Data);
-    }
-    return 0;
-}
+        for (int i = 0; i < count; i++) {
+            auto item = objects[i];
 
-int Yolo::partition(const cv::Mat &rgb) {
+            jfieldID type = env->GetFieldID(output_clazz, "type", "I");
+            env->SetIntField(j_output, type, item.label);
 
-    return 0;
-}
+            jfieldID position = env->GetFieldID(output_clazz, "position", "[F");
+            float array[4];
+            array[0] = item.rect.x;
+            array[1] = item.rect.y;
+            array[2] = item.rect.width;
+            array[3] = item.rect.height;
+            jfloatArray rectArray = env->NewFloatArray(4);
+            env->SetFloatArrayRegion(rectArray, 0, 4, array);
+            env->SetObjectField(j_output, position, rectArray);
 
-int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_threshold,
-                 float nms_threshold) {
-    int width = rgb.cols;
-    int height = rgb.rows;
+            jfieldID prob = env->GetFieldID(output_clazz, "prob", "F");
+            env->SetFloatField(j_output, prob, item.prob);
 
-    // pad to multiple of 32
-    int w = width;
-    int h = height;
-    float scale = 1.f;
-    if (w > h) {
-        scale = (float) target_size / w;
-        w = target_size;
-        h = h * scale;
-    } else {
-        scale = (float) target_size / h;
-        h = target_size;
-        w = w * scale;
-    }
-
-    ncnn::Mat in = ncnn::Mat::from_pixels_resize(rgb.data, ncnn::Mat::PIXEL_RGB2BGR, width, height,
-                                                 w, h);
-
-    // pad to target_size rectangle
-    int w_pad = (w + 31) / 32 * 32 - w;
-    int h_pad = (h + 31) / 32 * 32 - h;
-    ncnn::Mat in_pad;
-    ncnn::copy_make_border(in, in_pad, h_pad / 2, h_pad - h_pad / 2, w_pad / 2, w_pad - w_pad / 2,
-                           ncnn::BORDER_CONSTANT, 0.f);
-
-    in_pad.substract_mean_normalize(0, norm_values);
-
-    ncnn::Extractor ex = yolo.create_extractor();
-
-    ex.input("images", in_pad);
-
-    std::vector<Object> proposals;
-
-    ncnn::Mat out;
-    ex.extract("output", out);
-
-    std::vector<int> strides = {8, 16, 32}; // might have stride=64
-    std::vector<GridAndStride> grid_strides;
-    generate_grids_and_stride(in_pad.w, in_pad.h, strides, grid_strides);
-    generate_proposals(grid_strides, out, prob_threshold, proposals);
-
-    // sort all proposals by score from highest to lowest
-    qsort_descent_inplace(proposals);
-
-    // apply nms with nms_threshold
-    std::vector<int> picked;
-    nms_sorted_bboxes(proposals, picked, nms_threshold);
-
-    int count = picked.size();
-
-    objects.resize(count);
-    for (int i = 0; i < count; i++) {
-        objects[i] = proposals[picked[i]];
-
-        // adjust offset to original unpadded
-        float x0 = (objects[i].rect.x - (w_pad / 2)) / scale;
-        float y0 = (objects[i].rect.y - (h_pad / 2)) / scale;
-        float x1 = (objects[i].rect.x + objects[i].rect.width - (w_pad / 2)) / scale;
-        float y1 = (objects[i].rect.y + objects[i].rect.height - (h_pad / 2)) / scale;
-
-        // clip
-        x0 = std::max(std::min(x0, (float) (width - 1)), 0.f);
-        y0 = std::max(std::min(y0, (float) (height - 1)), 0.f);
-        x1 = std::max(std::min(x1, (float) (width - 1)), 0.f);
-        y1 = std::max(std::min(y1, (float) (height - 1)), 0.f);
-
-        objects[i].rect.x = x0;
-        objects[i].rect.y = y0;
-        objects[i].rect.width = x1 - x0;
-        objects[i].rect.height = y1 - y0;
-    }
-
-    // sort objects by area
-    struct {
-        bool operator()(const Object &a, const Object &b) const {
-            return a.rect.area() > b.rect.area();
+            //add
+            env->CallBooleanMethod(arraylist_obj, arraylist_add, j_output);
         }
-    } objects_area_greater;
-    std::sort(objects.begin(), objects.end(), objects_area_greater);
+        //回调
+        env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
 
-    /**
-     * 回调给Java/Kotlin层
-     * */
-    JNIEnv *env;
-    javaVM->AttachCurrentThread(&env, nullptr);
-    jclass callback_clazz = env->GetObjectClass(j_callback);
-    jclass output_clazz = env->GetObjectClass(j_output);
-    /**
-     * I: 整数类型（int）
-     * J: 长整数类型（long）
-     * D: 双精度浮点数类型（double）
-     * F: 单精度浮点数类型（float）
-     * Z: 布尔类型（boolean）
-     * C: 字符类型（char）
-     * B: 字节类型（byte）
-     * S: 短整数类型（short）
-     * <br>-----------------------------------------------<br>
-     * Ljava/lang/Object;: 表示 Object 类型的引用
-     * Ljava/lang/String;: 表示 String 类型的引用
-     * L包名/类名;: 表示特定包名和类名的引用
-     * <br>-----------------------------------------------<br>
-     * 例如：
-     * int add(int a, int b): (II)I
-     *
-     * String concat(String str1, String str2): (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
-     * <br>-----------------------------------------------<br>
-     * [Ljava/lang/String;: 表示 String 类型的一维数组
-     * */
-    jmethodID j_method_id = env->GetMethodID(
-            callback_clazz, "onDetect", "(Ljava/util/ArrayList;)V"
-    );
-
-    //获取ArrayList类
-    jclass list_clazz = env->FindClass("java/util/ArrayList");
-    jmethodID arraylist_init = env->GetMethodID(list_clazz, "<init>", "()V");
-    jmethodID arraylist_add = env->GetMethodID(list_clazz, "add", "(Ljava/lang/Object;)Z");
-    //初始化ArrayList对象
-    jobject arraylist_obj = env->NewObject(list_clazz, arraylist_init);
-
-    for (int i = 0; i < count; i++) {
-        auto item = objects[i];
-
-        jfieldID type = env->GetFieldID(output_clazz, "type", "I");
-        env->SetIntField(j_output, type, item.label);
-
-        jfieldID position = env->GetFieldID(output_clazz, "position", "[F");
-        float array[4];
-        array[0] = item.rect.x;
-        array[1] = item.rect.y;
-        array[2] = item.rect.width;
-        array[3] = item.rect.height;
-        jfloatArray rectArray = env->NewFloatArray(4);
-        env->SetFloatArrayRegion(rectArray, 0, 4, array);
-        env->SetObjectField(j_output, position, rectArray);
-
-        jfieldID prob = env->GetFieldID(output_clazz, "prob", "F");
-        env->SetFloatField(j_output, prob, item.prob);
-
-        //add
-        env->CallBooleanMethod(arraylist_obj, arraylist_add, j_output);
+        /**
+         * Mat数据。
+         * <br>-----------------------------------------------<br>
+         * 通过内存地址赋值。Java层传入Mat对象内存地址，再通过C++给此地址赋值，Java即可得到内存地址的Mat矩阵数据
+         * */
+        auto *res = (cv::Mat *) j_mat_addr;
+        res->create(rgb.rows, rgb.cols, rgb.type());
+        memcpy(res->data, rgb.data, rgb.rows * rgb.step);
     }
-    //回调
-    env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
-
-    /**
-     * Mat数据。
-     * <br>-----------------------------------------------<br>
-     * 通过内存地址赋值。Java层传入Mat对象内存地址，再通过C++给此地址赋值，Java即可得到内存地址的Mat矩阵数据
-     * */
-    auto *res = (cv::Mat *) j_mat_addr;
-    res->create(rgb.rows, rgb.cols, rgb.type());
-    memcpy(res->data, rgb.data, rgb.rows * rgb.step);
     return 0;
 }
 
@@ -482,86 +492,87 @@ void Yolo::initNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, jo
 }
 
 int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {
-    static const char *class_names[] = {
-            "tripod", "tee", "person",
-            "shut-off valve", "hazard signs", "pressure tester",
-            "pressure gauge", "reflective clothing", "respirator masks",
-            "throat foil", "round-headed water gun", "safety signs",
-            "helmet", "security identification", "safety ropes",
-            "intercom", "pointed water gun", "switch",
-            "alarm device", "joint", "construction street signs",
-            "gas detectors", "hoses", "hose_rectangle",
-            "flow-meter", "fire hydrant box", "fire extinguisher",
-            "lighting equipment", "flame-out protection", "exposed wires",
-            "circuit diagram", "cordon", "regulator",
-            "length adjuster", "stickers", "across wires",
-            "road cones", "hose", "filter",
-            "distribution box", "long-shank valves", "valve", "ducts"
-    };
+    if (state == 3) {
+        static const char *class_names[] = {
+                "tripod", "tee", "person",
+                "shut-off valve", "hazard signs", "pressure tester",
+                "pressure gauge", "reflective clothing", "respirator masks",
+                "throat foil", "round-headed water gun", "safety signs",
+                "helmet", "security identification", "safety ropes",
+                "intercom", "pointed water gun", "switch",
+                "alarm device", "joint", "construction street signs",
+                "gas detectors", "hoses", "hose_rectangle",
+                "flow-meter", "fire hydrant box", "fire extinguisher",
+                "lighting equipment", "flame-out protection", "exposed wires",
+                "circuit diagram", "cordon", "regulator",
+                "length adjuster", "stickers", "across wires",
+                "road cones", "hose", "filter",
+                "distribution box", "long-shank valves", "valve", "ducts"
+        };
 
-    static const unsigned char colors[19][3] = {
-            {54,  67,  244},
-            {99,  30,  233},
-            {176, 39,  156},
-            {183, 58,  103},
-            {181, 81,  63},
-            {243, 150, 33},
-            {244, 169, 3},
-            {212, 188, 0},
-            {136, 150, 0},
-            {80,  175, 76},
-            {74,  195, 139},
-            {57,  220, 205},
-            {59,  235, 255},
-            {7,   193, 255},
-            {0,   152, 255},
-            {34,  87,  255},
-            {72,  85,  121},
-            {158, 158, 158},
-            {139, 125, 96}
-    };
+        static const unsigned char colors[19][3] = {
+                {54,  67,  244},
+                {99,  30,  233},
+                {176, 39,  156},
+                {183, 58,  103},
+                {181, 81,  63},
+                {243, 150, 33},
+                {244, 169, 3},
+                {212, 188, 0},
+                {136, 150, 0},
+                {80,  175, 76},
+                {74,  195, 139},
+                {57,  220, 205},
+                {59,  235, 255},
+                {7,   193, 255},
+                {0,   152, 255},
+                {34,  87,  255},
+                {72,  85,  121},
+                {158, 158, 158},
+                {139, 125, 96}
+        };
 
-    int color_index = 0;
+        int color_index = 0;
 
-    for (const auto &obj: objects) {
-        const unsigned char *color = colors[color_index % 19];
+        for (const auto &obj: objects) {
+            const unsigned char *color = colors[color_index % 19];
 
-        color_index++;
+            color_index++;
 
-        cv::Scalar cc(color[0], color[1], color[2]);
+            cv::Scalar cc(color[0], color[1], color[2]);
 
-        cv::rectangle(rgb, obj.rect, cc, 2);
+            cv::rectangle(rgb, obj.rect, cc, 2);
 
-        char text[256];
-        sprintf(text, "%s", class_names[obj.label]);
-//        sprintf(text, "%s %.1f%%", class_names[obj.label], obj.prob * 100);
+            char text[256];
+            sprintf(text, "%s %.1f%%", class_names[obj.label], obj.prob * 100);
 
-        int baseLine = 0;
-        cv::Size label_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1,
-                                              &baseLine);
+            int baseLine = 0;
+            cv::Size label_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1,
+                                                  &baseLine);
 
-        int x = obj.rect.x;
-        int y = obj.rect.y - label_size.height - baseLine;
-        if (y < 0)
-            y = 0;
-        if (x + label_size.width > rgb.cols)
-            x = rgb.cols - label_size.width;
+            int x = obj.rect.x;
+            int y = obj.rect.y - label_size.height - baseLine;
+            if (y < 0)
+                y = 0;
+            if (x + label_size.width > rgb.cols)
+                x = rgb.cols - label_size.width;
 
-        cv::Size size = cv::Size(label_size.width, label_size.height + baseLine);
-        cv::Rect rc = cv::Rect(cv::Point(x, y), size);
-        cv::rectangle(rgb, rc, cc, -1);
+            cv::Size size = cv::Size(label_size.width, label_size.height + baseLine);
+            cv::Rect rc = cv::Rect(cv::Point(x, y), size);
+            cv::rectangle(rgb, rc, cc, -1);
 
-        cv::Scalar text_scalar = (color[0] + color[1] + color[2] >= 381)
-                                 ? cv::Scalar(0, 0, 0)
-                                 : cv::Scalar(255, 255, 255);
+            cv::Scalar text_scalar = (color[0] + color[1] + color[2] >= 381)
+                                     ? cv::Scalar(0, 0, 0)
+                                     : cv::Scalar(255, 255, 255);
 
 
-        cv::putText(rgb, text,
-                    cv::Point(x, y + label_size.height),
-                    cv::FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    text_scalar, 1
-        );
+            cv::putText(rgb, text,
+                        cv::Point(x, y + label_size.height),
+                        cv::FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        text_scalar, 1
+            );
+        }
     }
     return 0;
 }

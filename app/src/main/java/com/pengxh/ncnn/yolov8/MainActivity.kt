@@ -12,6 +12,7 @@ import android.widget.AdapterView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.pengxh.kt.lite.base.KotlinBaseActivity
+import com.pengxh.kt.lite.widget.dialog.AlertControlDialog
 import com.pengxh.ncnn.yolov8.databinding.ActivityMainBinding
 import org.opencv.android.OpenCVLoader
 import org.opencv.core.Mat
@@ -30,6 +31,7 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
     private val classArray = arrayOf("电线整洁", "电线杂乱", "餐馆厨房")
     private var facing = 1
     private var currentProcessor = 0
+    private var isShowing = false
 
     override fun initEvent() {
         binding.processorSpinner.onItemSelectedListener =
@@ -39,7 +41,7 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
                 ) {
                     if (position != currentProcessor) {
                         currentProcessor = position
-                        loadModelFromAssets(1)
+                        loadModelFromAssets(0)
                     }
                 }
 
@@ -65,7 +67,7 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         binding.surfaceView.holder.setFormat(PixelFormat.RGBA_8888)
         binding.surfaceView.holder.addCallback(this)
 
-        loadModelFromAssets(1)
+        loadModelFromAssets(0)
     }
 
     override fun initViewBinding(): ActivityMainBinding {
@@ -85,8 +87,6 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
     }
 
     override fun onClassify(possibles: FloatArray) {
-//        loadModelFromAssets(1)
-
         //找出最大值的下标
         var max = possibles[0]
         var maxIndex = 0
@@ -96,7 +96,35 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
                 maxIndex = index
             }
         }
-        Log.d(kTag, "${possibles.contentToString()} - ${classArray[maxIndex]}")
+
+        try {
+            Log.d(kTag, "${possibles.contentToString()} - ${classArray[maxIndex]}")
+            if (isShowing) {
+                return
+            }
+            runOnUiThread {
+                isShowing = true
+                AlertControlDialog.Builder()
+                    .setContext(this)
+                    .setTitle("提示")
+                    .setMessage("识别到目标场景，是否开始排查该场景的隐患？")
+                    .setNegativeButton("稍后")
+                    .setPositiveButton("好的").setOnDialogButtonClickListener(object :
+                        AlertControlDialog.OnDialogButtonClickListener {
+                        override fun onConfirmClick() {
+                            //更换为检测模型
+                            loadModelFromAssets(1)
+                            yolov8ncnn.updateYoloState(YoloStateConst.DETECT)
+                        }
+
+                        override fun onCancelClick() {
+                            isShowing = false
+                        }
+                    }).build().show()
+            }
+        } catch (e: ArrayIndexOutOfBoundsException) {
+            e.printStackTrace()
+        }
     }
 
     override fun onDetect(output: ArrayList<DetectResult>) {

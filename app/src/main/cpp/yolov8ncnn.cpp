@@ -122,15 +122,19 @@ void MyNdkCamera::on_image_render(cv::Mat &rgb) const {
         ncnn::MutexLockGuard g(lock);
 
         if (g_yolo) {
-//            g_yolo->classify(rgb);
+            //分类
+            g_yolo->classify(rgb);
 
             std::vector<Object> objects;
 
-//            g_yolo->partition(rgb);
+            //分割
+            g_yolo->partition(rgb);
 
+            //检测
             g_yolo->detect(rgb, objects);
 
-//            g_yolo->draw(rgb, objects);
+            //绘制
+            g_yolo->draw(rgb, objects);
         } else {
             draw_unsupported(rgb);
         }
@@ -248,6 +252,12 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_setOutputWindow(JNIEnv *env, jobject thiz
     g_camera->set_window(win);
 
     g_yolo->initNativeCallback(javaVM, input, nativeObjAddr, native_callback);
+    return JNI_TRUE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_updateYoloState(JNIEnv *env, jobject thiz, jint yolo_state) {
+    g_yolo->state = yolo_state;
     return JNI_TRUE;
 }
 }

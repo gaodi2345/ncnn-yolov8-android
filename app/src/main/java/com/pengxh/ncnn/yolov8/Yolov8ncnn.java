@@ -12,6 +12,8 @@ public class Yolov8ncnn {
 
     public native boolean setOutputWindow(Surface surface, DetectResult input, long nativeObjAddr, INativeCallback nativeCallback);
 
+    public native boolean updateYoloState(@YoloStateConst int yoloState);
+
     static {
         System.loadLibrary("yolov8ncnn");
     }
