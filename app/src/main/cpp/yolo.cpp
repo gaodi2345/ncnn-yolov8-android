@@ -285,7 +285,6 @@ int Yolo::classify(const cv::Mat &rgb) {
             float_buffer[j] = out[j];
         }
 
-
         /**
          * 回调给Java/Kotlin层
          * */

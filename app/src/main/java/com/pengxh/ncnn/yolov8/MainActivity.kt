@@ -23,6 +23,11 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
     private val kTag = "MainActivity"
     private val yolov8ncnn by lazy { Yolov8ncnn() }
     private val mat by lazy { Mat() }
+
+    /**
+     * 需要和训练出来的模型里面你的类别顺序保持一致
+     * */
+    private val classArray = arrayOf("电线整洁", "电线杂乱", "餐馆厨房")
     private var facing = 1
     private var currentProcessor = 0
 
@@ -78,8 +83,6 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         yolov8ncnn.setOutputWindow(holder.surface, DetectResult(), mat.nativeObjAddr, this)
     }
-
-    private val classArray = arrayOf("电线整洁", "电线杂乱", "餐馆厨房")
 
     override fun onClassify(possibles: FloatArray) {
 //        loadModelFromAssets(1)

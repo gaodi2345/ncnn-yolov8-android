@@ -11,7 +11,7 @@ import android.view.View
 import com.pengxh.kt.lite.extensions.dp2px
 import com.pengxh.kt.lite.extensions.sp2px
 
-class AITargetDetectView constructor(context: Context, attrs: AttributeSet) : View(context, attrs) {
+class TargetDetectView constructor(context: Context, attrs: AttributeSet) : View(context, attrs) {
 
     private val kTag = "DetectView"
     private val textPaint by lazy { TextPaint() }
