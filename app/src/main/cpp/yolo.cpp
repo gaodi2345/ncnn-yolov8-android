@@ -17,6 +17,8 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
+#include <algorithm>
+
 #include "cpu.h"
 
 static float fast_exp(float x) {
@@ -237,8 +239,8 @@ Yolo::load(AAssetManager *mgr, const char *model_type, int _target_size, const f
     char param_path[256];
     char model_path[256];
     //拼接模型名（路径）
-    sprintf(param_path, "yolov8%s.param", model_type);
-    sprintf(model_path, "yolov8%s.bin", model_type);
+    sprintf(param_path, "%s.param", model_type);
+    sprintf(model_path, "%s.bin", model_type);
 
     __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "param_path %s", param_path);
     __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "model_path %s", model_path);
@@ -253,6 +255,61 @@ Yolo::load(AAssetManager *mgr, const char *model_type, int _target_size, const f
     norm_values[0] = _norm_values[0];
     norm_values[1] = _norm_values[1];
     norm_values[2] = _norm_values[2];
+
+    return 0;
+}
+
+int Yolo::classify(const cv::Mat &rgb) {
+    int width = rgb.cols;
+    int height = rgb.rows;
+
+    //把opencv Mat转为 ncnn Mat
+    ncnn::Mat in = ncnn::Mat::from_pixels(rgb.data, ncnn::Mat::PIXEL_RGB2BGR, width, height);
+
+    std::vector<float> cls_scores;
+    {
+        in.substract_mean_normalize(mean_values, scale_values);
+        ncnn::Extractor ex = yolo.create_extractor();
+        ex.input("images", in);
+
+        ncnn::Mat out;
+        ex.extract("output", out);
+
+        int output_size = out.w;
+        float float_buffer[output_size];
+        for (int j = 0; j < out.w; j++) {
+            float_buffer[j] = out[j];
+        }
+
+        //找出最大值的下标
+//        int max_index = std::max_element(
+//                output_buffer, output_buffer + output_size
+//        ) - output_buffer;
+//        float char_buffer[output_size];
+
+        /**
+         * 回调给Java/Kotlin层
+         * */
+        JNIEnv *env;
+        javaVM->AttachCurrentThread(&env, nullptr);
+        jclass callback_clazz = env->GetObjectClass(j_callback);
+        jmethodID j_method_id = env->GetMethodID(
+                callback_clazz, "onClassify", "([F)V"
+        );
+
+        jfloatArray j_output_Data = env->NewFloatArray(output_size);
+        env->SetFloatArrayRegion(j_output_Data, 0, output_size, float_buffer);
+
+//        jfieldID j_type = env->GetFieldID(callback_clazz, "type", "Ljava/lang/String;");
+
+//        env->SetCharArrayRegion(j_output, j_type, class_values[max_index]);
+
+        env->CallVoidMethod(j_callback, j_method_id, j_output_Data);
+    }
+    return 0;
+}
+
+int Yolo::partition(const cv::Mat &rgb) {
 
     return 0;
 }
@@ -410,7 +467,6 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
      * <br>-----------------------------------------------<br>
      * 通过内存地址赋值。Java层传入Mat对象内存地址，再通过C++给此地址赋值，Java即可得到内存地址的Mat矩阵数据
      * */
-    __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "nativeObjAddr %lld", j_mat_addr);
     auto *res = (cv::Mat *) j_mat_addr;
     res->create(rgb.rows, rgb.cols, rgb.type());
     memcpy(res->data, rgb.data, rgb.rows * rgb.step);

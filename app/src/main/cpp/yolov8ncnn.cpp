@@ -122,13 +122,15 @@ void MyNdkCamera::on_image_render(cv::Mat &rgb) const {
         ncnn::MutexLockGuard g(lock);
 
         if (g_yolo) {
+            g_yolo->classify(rgb);
+
             std::vector<Object> objects;
 
-            //TODO 检测
-            g_yolo->detect(rgb, objects);
+//            g_yolo->partition(rgb);
 
-            //绘制检测结果（不支持中文）
-//            g_yolo->draw(rgb, objects);
+//            g_yolo->detect(rgb, objects);
+
+            g_yolo->draw(rgb, objects);
         } else {
             draw_unsupported(rgb);
         }
@@ -174,17 +176,23 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadModel(JNIEnv *env, jobject thiz, jobj
 
     AAssetManager *mgr = AAssetManager_fromJava(env, assetManager);
 
-    const char *model_types[] = {"s-detect-sim-opt-fp16"};
+    const char *model_types[] = {"model.ncnn", "yolov8s-detect-sim-opt-fp16"};
 
-    const int target_sizes[] = {320, 320, 320,};
+    const int target_sizes[] = {320, 320};
 
     const float mean_values[][3] = {
+            {103.53f, 116.28f, 123.675f},
             {103.53f, 116.28f, 123.675f}
     };
 
     const float norm_values[][3] = {
+            {1 / 255.f, 1 / 255.f, 1 / 255.f},
             {1 / 255.f, 1 / 255.f, 1 / 255.f}
     };
+
+    const float scale_values[3] = {0.017f, 0.017f, 0.017f};
+
+    const char *class_values[] = {"电线整洁", "电线杂乱", "餐馆厨房"};
 
     const char *model_type = model_types[(int) model_id];
     int target_size = target_sizes[(int) model_id];

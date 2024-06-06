@@ -49,11 +49,27 @@ public:
 
     void setNativeCallback(JavaVM *vm, jobject result, jlong nativeObjAddr, jobject pJobject);
 
+    /**
+     * 分类
+     * */
+    int classify(const cv::Mat &rgb);
+
+    /**
+     * 分割
+     * */
+    int partition(const cv::Mat &rgb);
+
+    /**
+     * 检测
+     * */
     int detect(const cv::Mat &rgb,
                std::vector<Object> &objects,
                float prob_threshold = 0.4f,
                float nms_threshold = 0.5f);
 
+    /**
+     * 绘制
+     * */
     int draw(cv::Mat &rgb, const std::vector<Object> &objects);
 
 private:
@@ -61,6 +77,8 @@ private:
     int target_size;
     float mean_values[3];
     float norm_values[3];
+    float scale_values[3];
+    char class_values[3];
     ncnn::UnlockedPoolAllocator blob_pool_allocator;
     ncnn::PoolAllocator workspace_pool_allocator;
 

@@ -2,7 +2,6 @@ package com.pengxh.ncnn.yolov8
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.os.Bundle
 import android.util.Log
@@ -13,11 +12,8 @@ import android.widget.AdapterView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.pengxh.kt.lite.base.KotlinBaseActivity
-import com.pengxh.kt.lite.extensions.createImageFileDir
-import com.pengxh.kt.lite.extensions.saveImage
 import com.pengxh.ncnn.yolov8.databinding.ActivityMainBinding
 import org.opencv.android.OpenCVLoader
-import org.opencv.android.Utils
 import org.opencv.core.Mat
 
 
@@ -28,7 +24,6 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
     private val yolov8ncnn by lazy { Yolov8ncnn() }
     private val mat by lazy { Mat() }
     private var facing = 1
-    private var currentModel = 0
     private var currentProcessor = 0
 
     override fun initEvent() {
@@ -39,7 +34,7 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
                 ) {
                     if (position != currentProcessor) {
                         currentProcessor = position
-                        reloadModel()
+                        loadModelFromAssets(0)
                     }
                 }
 
@@ -47,8 +42,11 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
             }
     }
 
-    private fun reloadModel() {
-        val result = yolov8ncnn.loadModel(assets, currentModel, currentProcessor)
+    /**
+     * index对应 JNI 里面定义的数组角标
+     * */
+    private fun loadModelFromAssets(index: Int) {
+        val result = yolov8ncnn.loadModel(assets, index, currentProcessor)
         if (!result) {
             Log.d(kTag, "reload: yolov8ncnn loadModel failed")
         }
@@ -62,7 +60,7 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         binding.surfaceView.holder.setFormat(PixelFormat.RGBA_8888)
         binding.surfaceView.holder.addCallback(this)
 
-        reloadModel()
+        loadModelFromAssets(0)
     }
 
     override fun initViewBinding(): ActivityMainBinding {
@@ -81,16 +79,26 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         yolov8ncnn.setOutputWindow(holder.surface, DetectResult(), mat.nativeObjAddr, this)
     }
 
+    override fun onClassify(possibles: FloatArray) {
+//        loadModelFromAssets(1)
+        Log.d(kTag, possibles.contentToString())
+    }
+
+//    override fun onClassify(possibles: FloatArray, result: String) {
+////        loadModelFromAssets(1)
+//        Log.d(kTag, "${possibles.contentToString()} - $result")
+//    }
+
     override fun onDetect(output: ArrayList<DetectResult>) {
         binding.detectView.updateTargetPosition(output)
 
-        if (mat.width() > 0 || mat.height() > 0) {
-            val bitmap = Bitmap.createBitmap(mat.width(), mat.height(), Bitmap.Config.ARGB_8888)
-            Utils.matToBitmap(mat, bitmap, true)
-            bitmap.saveImage("${createImageFileDir()}/${System.currentTimeMillis()}.png")
-        } else {
-            Log.d(kTag, "width: ${mat.width()}, height: ${mat.height()}")
-        }
+//        if (mat.width() > 0 || mat.height() > 0) {
+//            val bitmap = Bitmap.createBitmap(mat.width(), mat.height(), Bitmap.Config.ARGB_8888)
+//            Utils.matToBitmap(mat, bitmap, true)
+//            bitmap.saveImage("${createImageFileDir()}/${System.currentTimeMillis()}.png")
+//        } else {
+//            Log.d(kTag, "width: ${mat.width()}, height: ${mat.height()}")
+//        }
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {}
