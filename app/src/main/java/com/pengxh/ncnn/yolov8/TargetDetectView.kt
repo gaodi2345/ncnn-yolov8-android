@@ -29,7 +29,9 @@ class TargetDetectView constructor(context: Context, attrs: AttributeSet) : View
         "跨电线", "路锥", "软管", "过滤器", "配电箱",
         "长柄阀门", "阀门", "风管"
     )
-    private var results: MutableList<DetectResult> = ArrayList()
+    private val partitionArray = arrayOf("弯折", "断裂", "烧焦", "磨损", "铁锈", "龟裂")
+    private var results: MutableList<YoloResult> = ArrayList()
+    private var state = YoloStateConst.DETECT
 
     init {
         textPaint.color = Color.WHITE
@@ -47,23 +49,36 @@ class TargetDetectView constructor(context: Context, attrs: AttributeSet) : View
         borderPaint.isAntiAlias = true
     }
 
-    fun updateTargetPosition(results: MutableList<DetectResult>) {
+    fun updateTargetPosition(results: MutableList<YoloResult>, @YoloStateConst state: Int) {
         this.results = results
+        this.state = state
         postInvalidate()
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         results.forEach {
-            val label = classNames[it.type]
+            val label = when (state) {
+                YoloStateConst.DETECT -> {
+                    classNames[it.type]
+                }
+
+                YoloStateConst.PARTITION -> {
+                    partitionArray[it.type]
+                }
+
+                else -> {
+                    "unknown"
+                }
+            }
             val textLength = textPaint.measureText(label)
 
             //文字背景。数字仅为了纠正背景和文字以及边框对齐，因为坐标值转px时会丢失一次精度，转int会再丢失一次精度，最后会导致背景和文字以及边框无法完美对齐
             rect.set(
-                (it.position[0].dp2px(context) - 3).toInt(),
+                (it.position[0].dp2px(context)).toInt(),
                 (it.position[1].dp2px(context)).toInt(),
                 (it.position[0].dp2px(context) + textLength).toInt() + 10,
-                it.position[1].dp2px(context).toInt() - 55
+                it.position[1].dp2px(context).toInt() - 40
             )
             canvas.drawRect(rect, backgroundPaint)
 

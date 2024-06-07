@@ -125,16 +125,13 @@ void MyNdkCamera::on_image_render(cv::Mat &rgb) const {
             //分类
             g_yolo->classify(rgb);
 
-            //分割
-            g_yolo->partition(rgb);
-
             std::vector<Object> objects;
+
+            //分割
+            g_yolo->partition(rgb, objects);
 
             //检测
             g_yolo->detect(rgb, objects);
-
-            //绘制
-            g_yolo->draw(rgb, objects);
         } else {
             draw_unsupported(rgb);
         }
@@ -180,16 +177,19 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadModel(JNIEnv *env, jobject thiz, jobj
 
     AAssetManager *mgr = AAssetManager_fromJava(env, assetManager);
 
-    const char *model_types[] = {"model.ncnn", "yolov8s-detect-sim-opt-fp16"};
+    //分割、分类、检测
+    const char *model_types[] = {"best-sim-opt-fp16", "model.ncnn", "yolov8s-detect-sim-opt-fp16"};
 
-    const int target_sizes[] = {320, 320};
+    const int target_sizes[] = {320, 320, 320};
 
     const float mean_values[][3] = {
+            {103.53f, 116.28f, 123.675f},
             {103.53f, 116.28f, 123.675f},
             {103.53f, 116.28f, 123.675f}
     };
 
     const float norm_values[][3] = {
+            {1 / 255.f, 1 / 255.f, 1 / 255.f},
             {1 / 255.f, 1 / 255.f, 1 / 255.f},
             {1 / 255.f, 1 / 255.f, 1 / 255.f}
     };

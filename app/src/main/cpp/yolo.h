@@ -23,6 +23,8 @@ struct Object {
     cv::Rect_<float> rect;
     int label;
     float prob;
+    cv::Mat mask;
+    std::vector<float> mask_feat;
 };
 struct GridAndStride {
     int grid0;
@@ -67,7 +69,8 @@ public:
     /**
      * 分割
      * */
-    int partition(const cv::Mat &rgb);
+    int partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob_threshold = 0.4f,
+                  float nms_threshold = 0.5f);
 
     /**
      * 检测
@@ -81,6 +84,8 @@ public:
      * 绘制
      * */
     int draw(cv::Mat &rgb, const std::vector<Object> &objects);
+
+    int draw_mask(cv::Mat &rgb, const std::vector<Object> &objects);
 
 private:
     ncnn::Net yolo;

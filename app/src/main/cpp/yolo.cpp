@@ -130,10 +130,8 @@ generate_grids_and_stride(const int target_w, const int target_h, std::vector<in
 }
 
 static void generate_proposals(std::vector<GridAndStride> grid_strides, const ncnn::Mat &pred,
-                               float prob_threshold, std::vector<Object> &objects) {
+                               float prob_threshold, std::vector<Object> &objects, int num_class) {
     const int num_points = grid_strides.size();
-    //识别种类数
-    const int num_class = 43;
     const int reg_max_1 = 16;
 
     for (int i = 0; i < num_points; i++) {
@@ -205,6 +203,153 @@ static void generate_proposals(std::vector<GridAndStride> grid_strides, const nc
     }
 }
 
+/***模型分割*************/
+static void matmul(const std::vector<ncnn::Mat> &bottom_blobs, ncnn::Mat &top_blob) {
+    ncnn::Option opt;
+    opt.num_threads = 2;
+    opt.use_fp16_storage = false;
+    opt.use_packing_layout = false;
+
+    ncnn::Layer *op = ncnn::create_layer("MatMul");
+
+    // set param
+    ncnn::ParamDict pd;
+    pd.set(0, 0);// axis
+
+    op->load_param(pd);
+
+    op->create_pipeline(opt);
+    std::vector<ncnn::Mat> top_blobs(1);
+    op->forward(bottom_blobs, top_blobs, opt);
+    top_blob = top_blobs[0];
+
+    op->destroy_pipeline(opt);
+
+    delete op;
+}
+
+static void sigmoid(ncnn::Mat &bottom) {
+    ncnn::Option opt;
+    opt.num_threads = 4;
+    opt.use_fp16_storage = false;
+    opt.use_packing_layout = false;
+
+    ncnn::Layer *op = ncnn::create_layer("Sigmoid");
+
+    op->create_pipeline(opt);
+
+    // forward
+
+    op->forward_inplace(bottom, opt);
+    op->destroy_pipeline(opt);
+
+    delete op;
+}
+
+static void reshape(const ncnn::Mat &in, ncnn::Mat &out, int c, int h, int w, int d) {
+    ncnn::Option opt;
+    opt.num_threads = 4;
+    opt.use_fp16_storage = false;
+    opt.use_packing_layout = false;
+
+    ncnn::Layer *op = ncnn::create_layer("Reshape");
+
+    // set param
+    ncnn::ParamDict pd;
+
+    pd.set(0, w);// start
+    pd.set(1, h);// end
+    if (d > 0)
+        pd.set(11, d);//axes
+    pd.set(2, c);//axes
+    op->load_param(pd);
+
+    op->create_pipeline(opt);
+
+    // forward
+    op->forward(in, out, opt);
+
+    op->destroy_pipeline(opt);
+
+    delete op;
+}
+
+static void slice(const ncnn::Mat &in, ncnn::Mat &out, int start, int end, int axis) {
+    ncnn::Option opt;
+    opt.num_threads = 4;
+    opt.use_fp16_storage = false;
+    opt.use_packing_layout = false;
+
+    ncnn::Layer *op = ncnn::create_layer("Crop");
+
+    // set param
+    ncnn::ParamDict pd;
+
+    ncnn::Mat axes = ncnn::Mat(1);
+    axes.fill(axis);
+    ncnn::Mat ends = ncnn::Mat(1);
+    ends.fill(end);
+    ncnn::Mat starts = ncnn::Mat(1);
+    starts.fill(start);
+    pd.set(9, starts);// start
+    pd.set(10, ends);// end
+    pd.set(11, axes);//axes
+
+    op->load_param(pd);
+
+    op->create_pipeline(opt);
+
+    // forward
+    op->forward(in, out, opt);
+
+    op->destroy_pipeline(opt);
+
+    delete op;
+}
+
+static void interp(const ncnn::Mat &in, const float &scale, const int &out_w, const int &out_h,
+                   ncnn::Mat &out) {
+    ncnn::Option opt;
+    opt.num_threads = 4;
+    opt.use_fp16_storage = false;
+    opt.use_packing_layout = false;
+
+    ncnn::Layer *op = ncnn::create_layer("Interp");
+
+    // set param
+    ncnn::ParamDict pd;
+    pd.set(0, 2);// resize_type
+    pd.set(1, scale);// height_scale
+    pd.set(2, scale);// width_scale
+    pd.set(3, out_h);// height
+    pd.set(4, out_w);// width
+
+    op->load_param(pd);
+
+    op->create_pipeline(opt);
+
+    // forward
+    op->forward(in, out, opt);
+
+    op->destroy_pipeline(opt);
+
+    delete op;
+}
+
+static void decode_mask(const ncnn::Mat &mask_feat, const int &img_w, const int &img_h,
+                        const ncnn::Mat &mask_proto, const ncnn::Mat &in_pad, const int &wpad,
+                        const int &hpad, ncnn::Mat &mask_pred_result) {
+    ncnn::Mat masks;
+    matmul(std::vector<ncnn::Mat>{mask_feat, mask_proto}, masks);
+    sigmoid(masks);
+    reshape(masks, masks, masks.h, in_pad.h / 4, in_pad.w / 4, 0);
+    slice(masks, mask_pred_result, (wpad / 2) / 4, (in_pad.w - wpad / 2) / 4, 2);
+    slice(mask_pred_result, mask_pred_result, (hpad / 2) / 4, (in_pad.h - hpad / 2) / 4, 1);
+    interp(mask_pred_result, 4.0, img_w, img_h, mask_pred_result);
+}
+
+/***模型分割*************/
+
 Yolo::Yolo() {
     blob_pool_allocator.set_size_compare_ratio(0.f);
     workspace_pool_allocator.set_size_compare_ratio(0.f);
@@ -259,6 +404,22 @@ Yolo::load(AAssetManager *mgr, const char *model_type, int _target_size, const f
     return 0;
 }
 
+void Yolo::initNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, jobject pJobject) {
+    javaVM = vm;
+
+    /**
+     * JNIEnv不支持跨线程调用
+     * */
+    JNIEnv *env;
+    vm->AttachCurrentThread(&env, nullptr);
+    //此时input转为output
+    j_output = env->NewGlobalRef(input);
+
+    j_mat_addr = nativeObjAddr;
+
+    j_callback = env->NewGlobalRef(pJobject);
+}
+
 int Yolo::classify(const cv::Mat &rgb) {
     if (state == 0) {
         static const float scale_values[3] = {0.017f, 0.017f, 0.017f};
@@ -301,37 +462,152 @@ int Yolo::classify(const cv::Mat &rgb) {
     return 0;
 }
 
-int Yolo::partition(const cv::Mat &rgb) {
+int Yolo::partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob_threshold,
+                    float nms_threshold) {
     if (state == 1) {
         int width = rgb.cols;
         int height = rgb.rows;
 
-        //把opencv Mat转为 ncnn Mat
-        ncnn::Mat in = ncnn::Mat::from_pixels(rgb.data, ncnn::Mat::PIXEL_RGB2BGR, width, height);
+        // pad to multiple of 32
+        int w = width;
+        int h = height;
+        float scale;
+        if (w > h) {
+            scale = (float) target_size / w;
+            w = target_size;
+            h = h * scale;
+        } else {
+            scale = (float) target_size / h;
+            h = target_size;
+            w = w * scale;
+        }
 
-        in.substract_mean_normalize(mean_values, norm_values);
+        ncnn::Mat in = ncnn::Mat::from_pixels_resize(rgb.data, ncnn::Mat::PIXEL_BGR2RGB, width,
+                                                     height, w, h);
+
+        // pad to target_size rectangle
+        int wpad = (w + 31) / 32 * 32 - w;
+        int hpad = (h + 31) / 32 * 32 - h;
+        ncnn::Mat in_pad;
+        ncnn::copy_make_border(in, in_pad, hpad / 2, hpad - hpad / 2, wpad / 2, wpad - wpad / 2,
+                               ncnn::BORDER_CONSTANT, 0.f);
+
+        const float norm_vals[3] = {1 / 255.f, 1 / 255.f, 1 / 255.f};
+        in_pad.substract_mean_normalize(0, norm_vals);
+
+
         ncnn::Extractor ex = yolo.create_extractor();
-
-        ex.input("images", in);
+        ex.input("images", in_pad);
 
         ncnn::Mat out;
         ex.extract("output", out);
 
-        cv::Mat mask(out.h, out.w, CV_8UC1);
-        const float *probMap = out.channel(0);
-        const float *probMap1 = out.channel(1);
+        ncnn::Mat mask_proto;
+        ex.extract("seg", mask_proto);
 
-        for (int i{0}; i < out.h; i++) {
-            for (int j{0}; j < out.w; ++j) {
-                mask.at<uchar>(i, j) = probMap1[i * out.w + j] < probMap[i * out.w + j] ? 255 : 0;
-            }
+        std::vector<int> strides = {8, 16, 32};
+        std::vector<GridAndStride> grid_strides;
+        generate_grids_and_stride(in_pad.w, in_pad.h, strides, grid_strides);
+
+        std::vector<Object> proposals;
+        std::vector<Object> objects8;
+        generate_proposals(grid_strides, out, prob_threshold, objects8, 6);
+
+        proposals.insert(proposals.end(), objects8.begin(), objects8.end());
+
+        // sort all proposals by score from highest to lowest
+        qsort_descent_inplace(proposals);
+
+        // apply nms with nms_threshold
+        std::vector<int> picked;
+        nms_sorted_bboxes(proposals, picked, nms_threshold);
+
+        int count = picked.size();
+
+        ncnn::Mat mask_feat = ncnn::Mat(32, count, sizeof(float));
+        for (int i = 0; i < count; i++) {
+            float *mask_feat_ptr = mask_feat.row(i);
+            std::memcpy(mask_feat_ptr, proposals[picked[i]].mask_feat.data(),
+                        sizeof(float) * proposals[picked[i]].mask_feat.size());
         }
-        cv::resize(mask, mask, cv::Size(rgb.cols, rgb.rows), 0, 0);
-        cv::Mat segFrame;
-        cv::bitwise_and(rgb, rgb, segFrame, mask);
 
-        // 将 segFrame 的内容赋值回 rgb
-        segFrame.copyTo(rgb);
+        ncnn::Mat mask_pred_result;
+        decode_mask(mask_feat, width, height, mask_proto, in_pad, wpad, hpad, mask_pred_result);
+
+        objects.resize(count);
+        for (int i = 0; i < count; i++) {
+            objects[i] = proposals[picked[i]];
+
+            // adjust offset to original unpadded
+            float x0 = (objects[i].rect.x - (wpad / 2)) / scale;
+            float y0 = (objects[i].rect.y - (hpad / 2)) / scale;
+            float x1 = (objects[i].rect.x + objects[i].rect.width - (wpad / 2)) / scale;
+            float y1 = (objects[i].rect.y + objects[i].rect.height - (hpad / 2)) / scale;
+
+            // clip
+            x0 = std::max(std::min(x0, (float) (width - 1)), 0.f);
+            y0 = std::max(std::min(y0, (float) (height - 1)), 0.f);
+            x1 = std::max(std::min(x1, (float) (width - 1)), 0.f);
+            y1 = std::max(std::min(y1, (float) (height - 1)), 0.f);
+
+            objects[i].rect.x = x0;
+            objects[i].rect.y = y0;
+            objects[i].rect.width = x1 - x0;
+            objects[i].rect.height = y1 - y0;
+
+            objects[i].mask = cv::Mat::zeros(height, width, CV_32FC1);
+            cv::Mat mask = cv::Mat(height, width, CV_32FC1, (float *) mask_pred_result.channel(i));
+            mask(objects[i].rect).copyTo(objects[i].mask(objects[i].rect));
+        }
+
+        /**
+         * 回调给Java/Kotlin层
+         * */
+        JNIEnv *env;
+        javaVM->AttachCurrentThread(&env, nullptr);
+        jclass callback_clazz = env->GetObjectClass(j_callback);
+        jclass output_clazz = env->GetObjectClass(j_output);
+
+        jmethodID j_method_id = env->GetMethodID(
+                callback_clazz, "onPartition", "(Ljava/util/ArrayList;)V"
+        );
+
+        //获取ArrayList类
+        jclass list_clazz = env->FindClass("java/util/ArrayList");
+        jmethodID arraylist_init = env->GetMethodID(list_clazz, "<init>", "()V");
+        jmethodID arraylist_add = env->GetMethodID(list_clazz, "add", "(Ljava/lang/Object;)Z");
+        //初始化ArrayList对象
+        jobject arraylist_obj = env->NewObject(list_clazz, arraylist_init);
+
+        for (auto item: objects) {
+            jfieldID type = env->GetFieldID(output_clazz, "type", "I");
+            env->SetIntField(j_output, type, item.label);
+
+            jfieldID position = env->GetFieldID(output_clazz, "position", "[F");
+            float array[4];
+            array[0] = item.rect.x;
+            array[1] = item.rect.y;
+            array[2] = item.rect.width;
+            array[3] = item.rect.height;
+            jfloatArray rectArray = env->NewFloatArray(4);
+            env->SetFloatArrayRegion(rectArray, 0, 4, array);
+            env->SetObjectField(j_output, position, rectArray);
+
+            jfieldID prob = env->GetFieldID(output_clazz, "prob", "F");
+            env->SetFloatField(j_output, prob, item.prob);
+
+            //add
+            env->CallBooleanMethod(arraylist_obj, arraylist_add, j_output);
+        }
+        //回调
+        env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
+
+        /**
+         * Mat数据。
+         * */
+        auto *res = (cv::Mat *) j_mat_addr;
+        res->create(rgb.rows, rgb.cols, rgb.type());
+        memcpy(res->data, rgb.data, rgb.rows * rgb.step);
     }
     return 0;
 }
@@ -384,7 +660,7 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
         std::vector<int> strides = {8, 16, 32}; // might have stride=64
         std::vector<GridAndStride> grid_strides;
         generate_grids_and_stride(in_pad.w, in_pad.h, strides, grid_strides);
-        generate_proposals(grid_strides, out, prob_threshold, proposals);
+        generate_proposals(grid_strides, out, prob_threshold, proposals, 43);
 
         // sort all proposals by score from highest to lowest
         qsort_descent_inplace(proposals);
@@ -501,104 +777,134 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
     return 0;
 }
 
-void Yolo::initNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, jobject pJobject) {
-    javaVM = vm;
+int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {
+    static const char *class_names[] = {
+            "tripod", "tee", "person",
+            "shut-off valve", "hazard signs", "pressure tester",
+            "pressure gauge", "reflective clothing", "respirator masks",
+            "throat foil", "round-headed water gun", "safety signs",
+            "helmet", "security identification", "safety ropes",
+            "intercom", "pointed water gun", "switch",
+            "alarm device", "joint", "construction street signs",
+            "gas detectors", "hoses", "hose_rectangle",
+            "flow-meter", "fire hydrant box", "fire extinguisher",
+            "lighting equipment", "flame-out protection", "exposed wires",
+            "circuit diagram", "cordon", "regulator",
+            "length adjuster", "stickers", "across wires",
+            "road cones", "hose", "filter",
+            "distribution box", "long-shank valves", "valve", "ducts"
+    };
 
-    /**
-     * JNIEnv不支持跨线程调用
-     * */
-    JNIEnv *env;
-    vm->AttachCurrentThread(&env, nullptr);
-    //此时input转为output
-    j_output = env->NewGlobalRef(input);
+    static const unsigned char colors[19][3] = {
+            {54,  67,  244},
+            {99,  30,  233},
+            {176, 39,  156},
+            {183, 58,  103},
+            {181, 81,  63},
+            {243, 150, 33},
+            {244, 169, 3},
+            {212, 188, 0},
+            {136, 150, 0},
+            {80,  175, 76},
+            {74,  195, 139},
+            {57,  220, 205},
+            {59,  235, 255},
+            {7,   193, 255},
+            {0,   152, 255},
+            {34,  87,  255},
+            {72,  85,  121},
+            {158, 158, 158},
+            {139, 125, 96}
+    };
 
-    j_mat_addr = nativeObjAddr;
+    int color_index = 0;
 
-    j_callback = env->NewGlobalRef(pJobject);
+    for (const auto &obj: objects) {
+        const unsigned char *color = colors[color_index % 19];
+
+        color_index++;
+
+        cv::Scalar cc(color[0], color[1], color[2]);
+
+        cv::rectangle(rgb, obj.rect, cc, 2);
+
+        char text[256];
+        sprintf(text, "%s %.1f%%", class_names[obj.label], obj.prob * 100);
+
+        int baseLine = 0;
+        cv::Size label_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1,
+                                              &baseLine);
+
+        int x = obj.rect.x;
+        int y = obj.rect.y - label_size.height - baseLine;
+        if (y < 0)
+            y = 0;
+        if (x + label_size.width > rgb.cols)
+            x = rgb.cols - label_size.width;
+
+        cv::Size size = cv::Size(label_size.width, label_size.height + baseLine);
+        cv::Rect rc = cv::Rect(cv::Point(x, y), size);
+        cv::rectangle(rgb, rc, cc, -1);
+
+        cv::Scalar text_scalar = (color[0] + color[1] + color[2] >= 381)
+                                 ? cv::Scalar(0, 0, 0)
+                                 : cv::Scalar(255, 255, 255);
+
+
+        cv::putText(rgb, text,
+                    cv::Point(x, y + label_size.height),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    text_scalar, 1
+        );
+    }
+    return 0;
 }
 
-int Yolo::draw(cv::Mat &rgb, const std::vector<Object> &objects) {
-    if (state == 3) {
-        static const char *class_names[] = {
-                "tripod", "tee", "person",
-                "shut-off valve", "hazard signs", "pressure tester",
-                "pressure gauge", "reflective clothing", "respirator masks",
-                "throat foil", "round-headed water gun", "safety signs",
-                "helmet", "security identification", "safety ropes",
-                "intercom", "pointed water gun", "switch",
-                "alarm device", "joint", "construction street signs",
-                "gas detectors", "hoses", "hose_rectangle",
-                "flow-meter", "fire hydrant box", "fire extinguisher",
-                "lighting equipment", "flame-out protection", "exposed wires",
-                "circuit diagram", "cordon", "regulator",
-                "length adjuster", "stickers", "across wires",
-                "road cones", "hose", "filter",
-                "distribution box", "long-shank valves", "valve", "ducts"
-        };
+int Yolo::draw_mask(cv::Mat &rgb, const std::vector<Object> &objects) {
+    static const unsigned char colors[19][3] = {
+            {54,  67,  244},
+            {99,  30,  233},
+            {176, 39,  156},
+            {183, 58,  103},
+            {181, 81,  63},
+            {243, 150, 33},
+            {244, 169, 3},
+            {212, 188, 0},
+            {136, 150, 0},
+            {80,  175, 76},
+            {74,  195, 139},
+            {57,  220, 205},
+            {59,  235, 255},
+            {7,   193, 255},
+            {0,   152, 255},
+            {34,  87,  255},
+            {72,  85,  121},
+            {158, 158, 158},
+            {139, 125, 96}
+    };
 
-        static const unsigned char colors[19][3] = {
-                {54,  67,  244},
-                {99,  30,  233},
-                {176, 39,  156},
-                {183, 58,  103},
-                {181, 81,  63},
-                {243, 150, 33},
-                {244, 169, 3},
-                {212, 188, 0},
-                {136, 150, 0},
-                {80,  175, 76},
-                {74,  195, 139},
-                {57,  220, 205},
-                {59,  235, 255},
-                {7,   193, 255},
-                {0,   152, 255},
-                {34,  87,  255},
-                {72,  85,  121},
-                {158, 158, 158},
-                {139, 125, 96}
-        };
+    int color_index = 0;
 
-        int color_index = 0;
+    for (const auto &obj: objects) {
+        const unsigned char *color = colors[color_index % 19];
 
-        for (const auto &obj: objects) {
-            const unsigned char *color = colors[color_index % 19];
+        color_index++;
 
-            color_index++;
-
-            cv::Scalar cc(color[0], color[1], color[2]);
-
-            cv::rectangle(rgb, obj.rect, cc, 2);
-
-            char text[256];
-            sprintf(text, "%s %.1f%%", class_names[obj.label], obj.prob * 100);
-
-            int baseLine = 0;
-            cv::Size label_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1,
-                                                  &baseLine);
-
-            int x = obj.rect.x;
-            int y = obj.rect.y - label_size.height - baseLine;
-            if (y < 0)
-                y = 0;
-            if (x + label_size.width > rgb.cols)
-                x = rgb.cols - label_size.width;
-
-            cv::Size size = cv::Size(label_size.width, label_size.height + baseLine);
-            cv::Rect rc = cv::Rect(cv::Point(x, y), size);
-            cv::rectangle(rgb, rc, cc, -1);
-
-            cv::Scalar text_scalar = (color[0] + color[1] + color[2] >= 381)
-                                     ? cv::Scalar(0, 0, 0)
-                                     : cv::Scalar(255, 255, 255);
-
-
-            cv::putText(rgb, text,
-                        cv::Point(x, y + label_size.height),
-                        cv::FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        text_scalar, 1
-            );
+        cv::Scalar cc(color[0], color[1], color[2]);
+        for (int y = 0; y < rgb.rows; y++) {
+            uchar *image_ptr = rgb.ptr(y);
+            const auto *mask_ptr = obj.mask.ptr<float>(y);
+            for (int x = 0; x < rgb.cols; x++) {
+                if (mask_ptr[x] >= 0.5) {
+                    image_ptr[0] = cv::saturate_cast<uchar>(image_ptr[0] * 0.5 + color[2] * 0.5);
+                    image_ptr[1] = cv::saturate_cast<uchar>(image_ptr[1] * 0.5 + color[1] * 0.5);
+                    image_ptr[2] = cv::saturate_cast<uchar>(image_ptr[2] * 0.5 + color[0] * 0.5);
+                }
+                image_ptr += 3;
+            }
         }
+        cv::rectangle(rgb, obj.rect, cc, 2);
     }
     return 0;
 }

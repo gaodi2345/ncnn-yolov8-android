@@ -208,4 +208,4 @@ Reshape                  /model.22/Reshape_5      1 1 /model.22/Concat_3_output_
 Concat                   /model.22/Concat_4       3 1 /model.22/Reshape_3_output_0 /model.22/Reshape_4_output_0 /model.22/Reshape_5_output_0 /model.22/Concat_4_output_0 0=1
 Concat                   /model.22/Concat_5       2 1 /model.22/Concat_4_output_0 /model.22/Concat_output_0 /model.22/Concat_5_output_0
 Permute                  /model.22/Transpose      1 1 /model.22/Concat_5_output_0 output 0=1
-Reshape                  /model.22/Reshape_6      1 1 /model.22/proto/cv3/act/Mul_output_0 output0 0=-1 1=32
+Reshape                  /model.22/Reshape_6      1 1 /model.22/proto/cv3/act/Mul_output_0 seg 0=-1 1=32

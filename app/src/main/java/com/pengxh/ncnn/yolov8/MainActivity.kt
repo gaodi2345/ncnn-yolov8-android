@@ -26,7 +26,7 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
     private val mat by lazy { Mat() }
 
     /**
-     * 需要和训练出来的模型里面你的类别顺序保持一致
+     * 需要和训练出来的模型里面类别顺序保持一致
      * */
     private val classArray = arrayOf("电线整洁", "电线杂乱", "餐馆厨房")
     private var facing = 1
@@ -86,7 +86,7 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        yolov8ncnn.setOutputWindow(holder.surface, DetectResult(), mat.nativeObjAddr, this)
+        yolov8ncnn.setOutputWindow(holder.surface, YoloResult(), mat.nativeObjAddr, this)
     }
 
     override fun onClassify(possibles: FloatArray) {
@@ -130,8 +130,12 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         }
     }
 
-    override fun onDetect(output: ArrayList<DetectResult>) {
-        binding.detectView.updateTargetPosition(output)
+    override fun onPartition(output: ArrayList<YoloResult>) {
+        binding.detectView.updateTargetPosition(output, YoloStateConst.PARTITION)
+    }
+
+    override fun onDetect(output: ArrayList<YoloResult>) {
+        binding.detectView.updateTargetPosition(output, YoloStateConst.DETECT)
 
 //        if (mat.width() > 0 || mat.height() > 0) {
 //            val bitmap = Bitmap.createBitmap(mat.width(), mat.height(), Bitmap.Config.ARGB_8888)

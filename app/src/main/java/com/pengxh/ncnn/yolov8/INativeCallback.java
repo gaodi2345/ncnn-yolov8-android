@@ -9,7 +9,12 @@ public interface INativeCallback {
     void onClassify(float[] possibles);
 
     /**
+     * 分割
+     */
+    void onPartition(ArrayList<YoloResult> output);
+
+    /**
      * 检测
      */
-    void onDetect(ArrayList<DetectResult> output);
+    void onDetect(ArrayList<YoloResult> output);
 }
