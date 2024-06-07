@@ -123,7 +123,7 @@ void MyNdkCamera::on_image_render(cv::Mat &rgb) const {
 
         if (g_yolo) {
             //分类
-//            g_yolo->classify(rgb);
+            g_yolo->classify(rgb);
 
             //分割
             g_yolo->partition(rgb);

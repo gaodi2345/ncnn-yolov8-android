@@ -58,12 +58,12 @@ class TargetDetectView constructor(context: Context, attrs: AttributeSet) : View
             val label = classNames[it.type]
             val textLength = textPaint.measureText(label)
 
-            //文字背景
+            //文字背景。数字仅为了纠正背景和文字以及边框对齐，因为坐标值转px时会丢失一次精度，转int会再丢失一次精度，最后会导致背景和文字以及边框无法完美对齐
             rect.set(
-                (it.position[0].dp2px(context)).toInt(),
+                (it.position[0].dp2px(context) - 3).toInt(),
                 (it.position[1].dp2px(context)).toInt(),
                 (it.position[0].dp2px(context) + textLength).toInt() + 10,
-                it.position[1].dp2px(context).toInt() - 40
+                it.position[1].dp2px(context).toInt() - 55
             )
             canvas.drawRect(rect, backgroundPaint)
 
