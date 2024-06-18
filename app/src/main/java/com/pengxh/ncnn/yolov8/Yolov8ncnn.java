@@ -10,7 +10,7 @@ public class Yolov8ncnn {
 
     public native boolean closeCamera();
 
-    public native boolean setOutputWindow(Surface surface, YoloResult input, long nativeObjAddr, INativeCallback nativeCallback);
+    public native boolean setOutputWindow(Surface surface, long nativeObjAddr, INativeCallback nativeCallback);
 
     public native boolean updateYoloState(@YoloStateConst int yoloState);
 

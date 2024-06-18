@@ -11,10 +11,10 @@ public interface INativeCallback {
     /**
      * 分割
      */
-    void onPartition(ArrayList<YoloResult> output);
+    void onPartition(ArrayList<String> output);
 
     /**
      * 检测
      */
-    void onDetect(ArrayList<YoloResult> output);
+    void onDetect(ArrayList<String> output);
 }

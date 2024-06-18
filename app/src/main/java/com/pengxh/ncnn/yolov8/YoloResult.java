@@ -3,7 +3,7 @@ package com.pengxh.ncnn.yolov8;
 public class YoloResult {
     private int type;
     private float[] position;
-    private float prob;
+    private String prob;
 
     public int getType() {
         return type;
@@ -21,11 +21,11 @@ public class YoloResult {
         this.position = position;
     }
 
-    public float getProb() {
+    public String getProb() {
         return prob;
     }
 
-    public void setProb(float prob) {
+    public void setProb(String prob) {
         this.prob = prob;
     }
 }

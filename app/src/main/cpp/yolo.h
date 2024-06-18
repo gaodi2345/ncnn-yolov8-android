@@ -59,7 +59,7 @@ public:
              const float *norm_values,
              bool use_gpu = false);
 
-    void initNativeCallback(JavaVM *vm, jobject result, jlong nativeObjAddr, jobject pJobject);
+    void initNativeCallback(JavaVM *vm, jlong nativeObjAddr, jobject pJobject);
 
     /**
      * 分类
@@ -99,8 +99,6 @@ private:
      * 全局引用
      * */
     JavaVM *javaVM;
-    //输出结果类
-    jobject j_output;
     //Java传过来的Mat对象内存地址
     jlong j_mat_addr;
     //回调类

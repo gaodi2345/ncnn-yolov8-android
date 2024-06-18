@@ -143,6 +143,20 @@ void MyNdkCamera::on_image_render(cv::Mat &rgb) const {
 
 static MyNdkCamera *g_camera = nullptr;
 
+//分割、分类、检测
+const char *model_types[] = {"best-sim-opt-fp16", "model.ncnn", "yolov8s-detect-sim-opt-fp16"};
+const int target_sizes[] = {320, 320, 320};
+const float mean_values[][3] = {
+        {103.53f, 116.28f, 123.675f},
+        {103.53f, 116.28f, 123.675f},
+        {103.53f, 116.28f, 123.675f}
+};
+const float norm_values[][3] = {
+        {1 / 255.f, 1 / 255.f, 1 / 255.f},
+        {1 / 255.f, 1 / 255.f, 1 / 255.f},
+        {1 / 255.f, 1 / 255.f, 1 / 255.f}
+};
+
 extern "C" {
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
     __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "JNI_OnLoad");
@@ -171,28 +185,11 @@ JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
 JNIEXPORT jboolean JNICALL
 Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadModel(JNIEnv *env, jobject thiz, jobject assetManager,
                                                  jint model_id, jint processor) {
-    if (model_id < 0 || model_id > 6 || processor < 0 || processor > 1) {
+    if (model_id < 0 || model_id > 2 || processor < 0 || processor > 1) {
         return JNI_FALSE;
     }
 
     AAssetManager *mgr = AAssetManager_fromJava(env, assetManager);
-
-    //分割、分类、检测
-    const char *model_types[] = {"best-sim-opt-fp16", "model.ncnn", "yolov8s-detect-sim-opt-fp16"};
-
-    const int target_sizes[] = {320, 320, 320};
-
-    const float mean_values[][3] = {
-            {103.53f, 116.28f, 123.675f},
-            {103.53f, 116.28f, 123.675f},
-            {103.53f, 116.28f, 123.675f}
-    };
-
-    const float norm_values[][3] = {
-            {1 / 255.f, 1 / 255.f, 1 / 255.f},
-            {1 / 255.f, 1 / 255.f, 1 / 255.f},
-            {1 / 255.f, 1 / 255.f, 1 / 255.f}
-    };
 
     const char *model_type = model_types[(int) model_id];
     int target_size = target_sizes[(int) model_id];
@@ -244,14 +241,14 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_closeCamera(JNIEnv *env, jobject thiz) {
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_setOutputWindow(JNIEnv *env, jobject thiz, jobject surface,
-                                                       jobject input, jlong nativeObjAddr,
+Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_setOutputWindow(JNIEnv *env, jobject thiz,
+                                                       jobject surface, jlong nativeObjAddr,
                                                        jobject native_callback) {
     ANativeWindow *win = ANativeWindow_fromSurface(env, surface);
 
     g_camera->set_window(win);
 
-    g_yolo->initNativeCallback(javaVM, input, nativeObjAddr, native_callback);
+    g_yolo->initNativeCallback(javaVM, nativeObjAddr, native_callback);
     return JNI_TRUE;
 }
 

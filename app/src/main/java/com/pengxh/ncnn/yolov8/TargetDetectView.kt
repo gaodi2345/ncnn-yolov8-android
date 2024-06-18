@@ -32,12 +32,15 @@ class TargetDetectView constructor(context: Context, attrs: AttributeSet) : View
     private val partitionArray = arrayOf("弯折", "断裂", "烧焦", "磨损", "铁锈", "龟裂")
     private var results: MutableList<YoloResult> = ArrayList()
     private var state = YoloStateConst.DETECT
+    private var textHeight = 0
 
     init {
         textPaint.color = Color.WHITE
         textPaint.isAntiAlias = true
         textPaint.textAlign = Paint.Align.CENTER
         textPaint.textSize = 14f.sp2px(context)
+        val fontMetrics = textPaint.fontMetrics
+        textHeight = (fontMetrics.bottom - fontMetrics.top).toInt()
 
         backgroundPaint.color = Color.BLUE
         backgroundPaint.style = Paint.Style.FILL
@@ -78,7 +81,7 @@ class TargetDetectView constructor(context: Context, attrs: AttributeSet) : View
                 (it.position[0].dp2px(context)).toInt(),
                 (it.position[1].dp2px(context)).toInt(),
                 (it.position[0].dp2px(context) + textLength).toInt() + 10,
-                it.position[1].dp2px(context).toInt() - 40
+                it.position[1].dp2px(context).toInt() - textHeight
             )
             canvas.drawRect(rect, backgroundPaint)
 

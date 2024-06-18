@@ -404,7 +404,7 @@ Yolo::load(AAssetManager *mgr, const char *model_type, int _target_size, const f
     return 0;
 }
 
-void Yolo::initNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, jobject pJobject) {
+void Yolo::initNativeCallback(JavaVM *vm, jlong nativeObjAddr, jobject pJobject) {
     javaVM = vm;
 
     /**
@@ -412,9 +412,6 @@ void Yolo::initNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, jo
      * */
     JNIEnv *env;
     vm->AttachCurrentThread(&env, nullptr);
-    //此时input转为output
-    j_output = env->NewGlobalRef(input);
-
     j_mat_addr = nativeObjAddr;
 
     j_callback = env->NewGlobalRef(pJobject);
@@ -559,55 +556,6 @@ int Yolo::partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob
             cv::Mat mask = cv::Mat(height, width, CV_32FC1, (float *) mask_pred_result.channel(i));
             mask(objects[i].rect).copyTo(objects[i].mask(objects[i].rect));
         }
-
-        /**
-         * 回调给Java/Kotlin层
-         * */
-        JNIEnv *env;
-        javaVM->AttachCurrentThread(&env, nullptr);
-        jclass callback_clazz = env->GetObjectClass(j_callback);
-        jclass output_clazz = env->GetObjectClass(j_output);
-
-        jmethodID j_method_id = env->GetMethodID(
-                callback_clazz, "onPartition", "(Ljava/util/ArrayList;)V"
-        );
-
-        //获取ArrayList类
-        jclass list_clazz = env->FindClass("java/util/ArrayList");
-        jmethodID arraylist_init = env->GetMethodID(list_clazz, "<init>", "()V");
-        jmethodID arraylist_add = env->GetMethodID(list_clazz, "add", "(Ljava/lang/Object;)Z");
-        //初始化ArrayList对象
-        jobject arraylist_obj = env->NewObject(list_clazz, arraylist_init);
-
-        for (auto item: objects) {
-            jfieldID type = env->GetFieldID(output_clazz, "type", "I");
-            env->SetIntField(j_output, type, item.label);
-
-            jfieldID position = env->GetFieldID(output_clazz, "position", "[F");
-            float array[4];
-            array[0] = item.rect.x;
-            array[1] = item.rect.y;
-            array[2] = item.rect.width;
-            array[3] = item.rect.height;
-            jfloatArray rectArray = env->NewFloatArray(4);
-            env->SetFloatArrayRegion(rectArray, 0, 4, array);
-            env->SetObjectField(j_output, position, rectArray);
-
-            jfieldID prob = env->GetFieldID(output_clazz, "prob", "F");
-            env->SetFloatField(j_output, prob, item.prob);
-
-            //add
-            env->CallBooleanMethod(arraylist_obj, arraylist_add, j_output);
-        }
-        //回调
-        env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
-
-        /**
-         * Mat数据。
-         * */
-        auto *res = (cv::Mat *) j_mat_addr;
-        res->create(rgb.rows, rgb.cols, rgb.type());
-        memcpy(res->data, rgb.data, rgb.rows * rgb.step);
     }
     return 0;
 }
@@ -707,7 +655,6 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
         JNIEnv *env;
         javaVM->AttachCurrentThread(&env, nullptr);
         jclass callback_clazz = env->GetObjectClass(j_callback);
-        jclass output_clazz = env->GetObjectClass(j_output);
         /**
          * I: 整数类型（int）
          * J: 长整数类型（long）
@@ -740,27 +687,24 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
         //初始化ArrayList对象
         jobject arraylist_obj = env->NewObject(list_clazz, arraylist_init);
 
-        for (int i = 0; i < count; i++) {
-            auto item = objects[i];
-
-            jfieldID type = env->GetFieldID(output_clazz, "type", "I");
-            env->SetIntField(j_output, type, item.label);
-
-            jfieldID position = env->GetFieldID(output_clazz, "position", "[F");
+        for (const auto &item: objects) {
             float array[4];
             array[0] = item.rect.x;
             array[1] = item.rect.y;
             array[2] = item.rect.width;
             array[3] = item.rect.height;
-            jfloatArray rectArray = env->NewFloatArray(4);
-            env->SetFloatArrayRegion(rectArray, 0, 4, array);
-            env->SetObjectField(j_output, position, rectArray);
 
-            jfieldID prob = env->GetFieldID(output_clazz, "prob", "F");
-            env->SetFloatField(j_output, prob, item.prob);
+            char text[256];
+            sprintf(
+                    text,
+                    "%d %f %f %f %f %.1f%%",
+                    item.label,
+                    array[0], array[1], array[2], array[3],
+                    item.prob * 100
+            );
 
             //add
-            env->CallBooleanMethod(arraylist_obj, arraylist_add, j_output);
+            env->CallBooleanMethod(arraylist_obj, arraylist_add, env->NewStringUTF(text));
         }
         //回调
         env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);

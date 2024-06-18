@@ -12,6 +12,7 @@ import android.widget.AdapterView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.pengxh.kt.lite.base.KotlinBaseActivity
+import com.pengxh.kt.lite.extensions.toJson
 import com.pengxh.kt.lite.widget.dialog.AlertControlDialog
 import com.pengxh.ncnn.yolov8.databinding.ActivityMainBinding
 import org.opencv.android.OpenCVLoader
@@ -83,7 +84,7 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        yolov8ncnn.setOutputWindow(holder.surface, YoloResult(), mat.nativeObjAddr, this)
+        yolov8ncnn.setOutputWindow(holder.surface, mat.nativeObjAddr, this)
     }
 
     override fun onClassify(possibles: FloatArray) {
@@ -127,12 +128,31 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         }
     }
 
-    override fun onPartition(output: ArrayList<YoloResult>) {
-        binding.detectView.updateTargetPosition(output, YoloStateConst.PARTITION)
+    override fun onPartition(output: ArrayList<String>) {
+
     }
 
-    override fun onDetect(output: ArrayList<YoloResult>) {
-        binding.detectView.updateTargetPosition(output, YoloStateConst.DETECT)
+    override fun onDetect(output: ArrayList<String>) {
+        //转成泛型集合
+        val results = ArrayList<YoloResult>()
+        output.forEach {
+            val yolo = YoloResult()
+
+            val strings = it.split(" ")
+            yolo.type = strings.first().toInt()
+
+            val array = FloatArray(4)
+            array[0] = strings[1].toFloat()
+            array[1] = strings[2].toFloat()
+            array[2] = strings[3].toFloat()
+            array[3] = strings[4].toFloat()
+            yolo.position = array
+
+            yolo.prob = strings.last()
+            results.add(yolo)
+        }
+        Log.d(kTag, results.toJson())
+        binding.detectView.updateTargetPosition(results, YoloStateConst.DETECT)
 
 //        if (mat.width() > 0 || mat.height() > 0) {
 //            val bitmap = Bitmap.createBitmap(mat.width(), mat.height(), Bitmap.Config.ARGB_8888)
