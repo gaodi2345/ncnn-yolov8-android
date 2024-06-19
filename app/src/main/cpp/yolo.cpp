@@ -425,7 +425,7 @@ int Yolo::classify(const cv::Mat &rgb) {
         int height = rgb.rows;
 
         //把opencv Mat转为 ncnn Mat
-        ncnn::Mat in = ncnn::Mat::from_pixels(rgb.data, ncnn::Mat::PIXEL_RGB2BGR, width, height);
+        ncnn::Mat in = ncnn::Mat::from_pixels(rgb.data, ncnn::Mat::PIXEL_RGB, width, height);
 
         std::vector<float> cls_scores;
         {
@@ -479,7 +479,7 @@ int Yolo::partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob
             w = w * scale;
         }
 
-        ncnn::Mat in = ncnn::Mat::from_pixels_resize(rgb.data, ncnn::Mat::PIXEL_BGR2RGB, width,
+        ncnn::Mat in = ncnn::Mat::from_pixels_resize(rgb.data, ncnn::Mat::PIXEL_RGB, width,
                                                      height, w, h);
 
         // pad to target_size rectangle
@@ -556,6 +556,43 @@ int Yolo::partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob
             cv::Mat mask = cv::Mat(height, width, CV_32FC1, (float *) mask_pred_result.channel(i));
             mask(objects[i].rect).copyTo(objects[i].mask(objects[i].rect));
         }
+
+        JNIEnv *env;
+        javaVM->AttachCurrentThread(&env, nullptr);
+        jclass callback_clazz = env->GetObjectClass(j_callback);
+
+        jmethodID j_method_id = env->GetMethodID(
+                callback_clazz, "onPartition", "(Ljava/util/ArrayList;)V"
+        );
+
+        //获取ArrayList类
+        jclass list_clazz = env->FindClass("java/util/ArrayList");
+        jmethodID arraylist_init = env->GetMethodID(list_clazz, "<init>", "()V");
+        jmethodID arraylist_add = env->GetMethodID(list_clazz, "add", "(Ljava/lang/Object;)Z");
+        //初始化ArrayList对象
+        jobject arraylist_obj = env->NewObject(list_clazz, arraylist_init);
+
+        for (const auto &item: objects) {
+            float array[4];
+            array[0] = item.rect.x;
+            array[1] = item.rect.y;
+            array[2] = item.rect.width;
+            array[3] = item.rect.height;
+
+            char text[256];
+            sprintf(
+                    text,
+                    "%d %f %f %f %f %.1f%%",
+                    item.label,
+                    array[0], array[1], array[2], array[3],
+                    item.prob * 100
+            );
+
+            //add
+            env->CallBooleanMethod(arraylist_obj, arraylist_add, env->NewStringUTF(text));
+        }
+        //回调
+        env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
     }
     return 0;
 }
@@ -581,7 +618,7 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
         }
 
         ncnn::Mat in = ncnn::Mat::from_pixels_resize(
-                rgb.data, ncnn::Mat::PIXEL_RGB2BGR, width, height, w, h
+                rgb.data, ncnn::Mat::PIXEL_RGB, width, height, w, h
         );
 
         // pad to target_size rectangle
