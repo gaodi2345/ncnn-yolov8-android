@@ -489,9 +489,7 @@ int Yolo::partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob
         ncnn::copy_make_border(in, in_pad, hpad / 2, hpad - hpad / 2, wpad / 2, wpad - wpad / 2,
                                ncnn::BORDER_CONSTANT, 0.f);
 
-        const float norm_vals[3] = {1 / 255.f, 1 / 255.f, 1 / 255.f};
-        in_pad.substract_mean_normalize(0, norm_vals);
-
+        in_pad.substract_mean_normalize(0, norm_values);
 
         ncnn::Extractor ex = yolo.create_extractor();
         ex.input("images", in_pad);
