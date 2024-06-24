@@ -29,9 +29,9 @@ class TargetDetectView constructor(context: Context, attrs: AttributeSet) : View
         "跨电线", "路锥", "软管", "过滤器", "配电箱",
         "长柄阀门", "阀门", "风管"
     )
-    private val partitionArray = arrayOf("弯折", "断裂", "烧焦", "磨损", "铁锈", "龟裂")
+    private val segmentationArray = arrayOf("弯折", "断裂", "烧焦", "磨损", "铁锈", "龟裂")
     private var results: MutableList<YoloResult> = ArrayList()
-    private var state = YoloStateConst.DETECT
+    private var segmentationResults: MutableList<YoloResult> = ArrayList()
     private var textHeight = 0
 
     init {
@@ -52,55 +52,56 @@ class TargetDetectView constructor(context: Context, attrs: AttributeSet) : View
         borderPaint.isAntiAlias = true
     }
 
-    fun updateTargetPosition(results: MutableList<YoloResult>, @YoloStateConst state: Int) {
+    fun updateTargetPosition(results: MutableList<YoloResult>) {
         this.results = results
-        this.state = state
+        invalidate()
+    }
+
+    fun updateTargetPosition(
+        segmentationResults: MutableList<YoloResult>, detectResults: MutableList<YoloResult>
+    ) {
+        this.segmentationResults = segmentationResults
+        this.results = detectResults
         postInvalidate()
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         results.forEach {
-            val label = when (state) {
-                YoloStateConst.DETECT -> {
-                    classNames[it.type]
-                }
-
-                YoloStateConst.PARTITION -> {
-                    partitionArray[it.type]
-                }
-
-                else -> {
-                    "unknown"
-                }
-            }
-            val textLength = textPaint.measureText(label)
-
-            //文字背景。数字仅为了纠正背景和文字以及边框对齐，因为坐标值转px时会丢失一次精度，转int会再丢失一次精度，最后会导致背景和文字以及边框无法完美对齐
-            rect.set(
-                (it.position[0].dp2px(context)).toInt(),
-                (it.position[1].dp2px(context)).toInt(),
-                (it.position[0].dp2px(context) + textLength).toInt() + 10,
-                it.position[1].dp2px(context).toInt() - textHeight
-            )
-            canvas.drawRect(rect, backgroundPaint)
-
-            //画文字。数值是文字左右边距，可酌情调整
-            canvas.drawText(
-                label,
-                it.position[0].dp2px(context) + (textLength + 10) / 2,
-                it.position[1].dp2px(context) - 10,
-                textPaint
-            )
-
-            //画框
-            rect.set(
-                (it.position[0].dp2px(context)).toInt(),
-                (it.position[1].dp2px(context)).toInt(),
-                (it.position[2] + it.position[0]).dp2px(context).toInt(),
-                (it.position[3] + it.position[1]).dp2px(context).toInt()
-            )
-            canvas.drawRect(rect, borderPaint)
+            drawTarget(canvas, it, classNames[it.type])
         }
+
+        segmentationResults.forEach {
+            drawTarget(canvas, it, segmentationArray[it.type])
+        }
+    }
+
+    private fun drawTarget(canvas: Canvas, it: YoloResult, label: String) {
+        val textLength = textPaint.measureText(label)
+        //文字背景。数字仅为了纠正背景和文字以及边框对齐，因为坐标值转px时会丢失一次精度，转int会再丢失一次精度，最后会导致背景和文字以及边框无法完美对齐
+        rect.set(
+            (it.position[0].dp2px(context)).toInt(),
+            (it.position[1].dp2px(context)).toInt(),
+            (it.position[0].dp2px(context) + textLength).toInt() + 10,
+            it.position[1].dp2px(context).toInt() - textHeight
+        )
+        canvas.drawRect(rect, backgroundPaint)
+
+        //画文字。数值是文字左右边距，可酌情调整
+        canvas.drawText(
+            label,
+            it.position[0].dp2px(context) + (textLength + 10) / 2,
+            it.position[1].dp2px(context) - 10,
+            textPaint
+        )
+
+        //画框
+        rect.set(
+            (it.position[0].dp2px(context)).toInt(),
+            (it.position[1].dp2px(context)).toInt(),
+            (it.position[2] + it.position[0]).dp2px(context).toInt(),
+            (it.position[3] + it.position[1]).dp2px(context).toInt()
+        )
+        canvas.drawRect(rect, borderPaint)
     }
 }

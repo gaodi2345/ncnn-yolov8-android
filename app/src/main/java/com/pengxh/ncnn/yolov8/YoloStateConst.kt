@@ -12,7 +12,7 @@ annotation class YoloStateConst {
          * 3 - 绘制
          * */
         const val CLASSIFY = 0
-        const val PARTITION = 1
+        const val SEGMENTATION = 1
         const val DETECT = 2
         const val DRAW = 3
     }

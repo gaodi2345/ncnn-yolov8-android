@@ -69,8 +69,8 @@ public:
     /**
      * 分割
      * */
-    int partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob_threshold = 0.4f,
-                  float nms_threshold = 0.5f);
+    int segmentation(const cv::Mat &rgb, std::vector<Object> &objects, float prob_threshold = 0.4f,
+                     float nms_threshold = 0.5f);
 
     /**
      * 检测

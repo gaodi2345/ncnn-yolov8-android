@@ -11,7 +11,7 @@ public interface INativeCallback {
     /**
      * 分割
      */
-    void onPartition(ArrayList<String> output);
+    void onSegmentation(ArrayList<String> segmentationOutput, ArrayList<String> detectOutput);
 
     /**
      * 检测

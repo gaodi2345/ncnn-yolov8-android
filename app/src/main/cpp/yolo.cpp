@@ -475,8 +475,8 @@ int Yolo::classify(const cv::Mat &rgb) {
     return 0;
 }
 
-int Yolo::partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob_threshold,
-                    float nms_threshold) {
+int Yolo::segmentation(const cv::Mat &rgb, std::vector<Object> &objects, float prob_threshold,
+                       float nms_threshold) {
     if (state == 1) {
         int width = rgb.cols;
         int height = rgb.rows;
@@ -507,6 +507,21 @@ int Yolo::partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob
                                ncnn::BORDER_CONSTANT, 0.f);
 
         in_pad.substract_mean_normalize(0, norm_values);
+
+        JNIEnv *env;
+        javaVM->AttachCurrentThread(&env, nullptr);
+        jclass callback_clazz = env->GetObjectClass(j_callback);
+        jmethodID j_method_id = env->GetMethodID(
+                callback_clazz, "onSegmentation", "(Ljava/util/ArrayList;Ljava/util/ArrayList;)V"
+        );
+
+        //获取ArrayList类
+        jclass list_clazz = env->FindClass("java/util/ArrayList");
+        jmethodID arraylist_init = env->GetMethodID(list_clazz, "<init>", "()V");
+        jmethodID arraylist_add = env->GetMethodID(list_clazz, "add", "(Ljava/lang/Object;)Z");
+        //初始化ArrayList对象
+        jobject segment_array_obj = env->NewObject(list_clazz, arraylist_init);
+        jobject detect_array_obj = env->NewObject(list_clazz, arraylist_init);
 
         //分割
         {
@@ -576,21 +591,6 @@ int Yolo::partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob
                 mask(objects[i].rect).copyTo(objects[i].mask(objects[i].rect));
             }
 
-            JNIEnv *env;
-            javaVM->AttachCurrentThread(&env, nullptr);
-            jclass callback_clazz = env->GetObjectClass(j_callback);
-
-            jmethodID j_method_id = env->GetMethodID(
-                    callback_clazz, "onPartition", "(Ljava/util/ArrayList;)V"
-            );
-
-            //获取ArrayList类
-            jclass list_clazz = env->FindClass("java/util/ArrayList");
-            jmethodID arraylist_init = env->GetMethodID(list_clazz, "<init>", "()V");
-            jmethodID arraylist_add = env->GetMethodID(list_clazz, "add", "(Ljava/lang/Object;)Z");
-            //初始化ArrayList对象
-            jobject arraylist_obj = env->NewObject(list_clazz, arraylist_init);
-
             for (const auto &item: objects) {
                 float array[4];
                 array[0] = item.rect.x;
@@ -608,10 +608,8 @@ int Yolo::partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob
                 );
 
                 //add
-                env->CallBooleanMethod(arraylist_obj, arraylist_add, env->NewStringUTF(text));
+                env->CallBooleanMethod(segment_array_obj, arraylist_add, env->NewStringUTF(text));
             }
-            //回调
-            env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
         }
 
         //检测
@@ -669,21 +667,6 @@ int Yolo::partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob
             } objects_area_greater;
             std::sort(objects.begin(), objects.end(), objects_area_greater);
 
-            JNIEnv *env;
-            javaVM->AttachCurrentThread(&env, nullptr);
-            jclass callback_clazz = env->GetObjectClass(j_callback);
-
-            jmethodID j_method_id = env->GetMethodID(
-                    callback_clazz, "onDetect", "(Ljava/util/ArrayList;)V"
-            );
-
-            //获取ArrayList类
-            jclass list_clazz = env->FindClass("java/util/ArrayList");
-            jmethodID arraylist_init = env->GetMethodID(list_clazz, "<init>", "()V");
-            jmethodID arraylist_add = env->GetMethodID(list_clazz, "add", "(Ljava/lang/Object;)Z");
-            //初始化ArrayList对象
-            jobject arraylist_obj = env->NewObject(list_clazz, arraylist_init);
-
             for (const auto &item: objects) {
                 float array[4];
                 array[0] = item.rect.x;
@@ -701,11 +684,12 @@ int Yolo::partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob
                 );
 
                 //add
-                env->CallBooleanMethod(arraylist_obj, arraylist_add, env->NewStringUTF(text));
+                env->CallBooleanMethod(detect_array_obj, arraylist_add, env->NewStringUTF(text));
             }
-            //回调
-            env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
         }
+
+        //回调
+        env->CallVoidMethod(j_callback, j_method_id, segment_array_obj, detect_array_obj);
     }
     return 0;
 }

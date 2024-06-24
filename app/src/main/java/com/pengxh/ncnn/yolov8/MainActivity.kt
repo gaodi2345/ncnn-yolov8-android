@@ -70,7 +70,7 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
 
 //        loadModelFromAssets(1)
         yolov8ncnn.loadMultiModel(assets, intArrayOf(0, 2), currentProcessor)
-        yolov8ncnn.updateYoloState(YoloStateConst.PARTITION)
+        yolov8ncnn.updateYoloState(YoloStateConst.SEGMENTATION)
     }
 
     override fun initViewBinding(): ActivityMainBinding {
@@ -130,10 +130,12 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         }
     }
 
-    override fun onPartition(output: ArrayList<String>) {
+    override fun onSegmentation(
+        segmentationOutput: ArrayList<String>, detectOutput: ArrayList<String>
+    ) {
         //转成泛型集合
-        val results = ArrayList<YoloResult>()
-        output.forEach {
+        val segmentationResults = ArrayList<YoloResult>()
+        segmentationOutput.forEach {
             val yolo = YoloResult()
 
             val strings = it.split(" ")
@@ -147,10 +149,27 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
             yolo.position = array
 
             yolo.prob = strings.last()
-            results.add(yolo)
+            segmentationResults.add(yolo)
         }
-        Log.d(kTag, results.toJson())
-        binding.detectView.updateTargetPosition(results, YoloStateConst.PARTITION)
+
+        val detectResults = ArrayList<YoloResult>()
+        detectOutput.forEach {
+            val yolo = YoloResult()
+
+            val strings = it.split(" ")
+            yolo.type = strings.first().toInt()
+
+            val array = FloatArray(4)
+            array[0] = strings[1].toFloat()
+            array[1] = strings[2].toFloat()
+            array[2] = strings[3].toFloat()
+            array[3] = strings[4].toFloat()
+            yolo.position = array
+
+            yolo.prob = strings.last()
+            detectResults.add(yolo)
+        }
+        binding.detectView.updateTargetPosition(segmentationResults, detectResults)
     }
 
     override fun onDetect(output: ArrayList<String>) {
@@ -173,7 +192,7 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
             results.add(yolo)
         }
         Log.d(kTag, results.toJson())
-        binding.detectView.updateTargetPosition(results, YoloStateConst.DETECT)
+        binding.detectView.updateTargetPosition(results)
 
 //        if (mat.width() > 0 || mat.height() > 0) {
 //            val bitmap = Bitmap.createBitmap(mat.width(), mat.height(), Bitmap.Config.ARGB_8888)
