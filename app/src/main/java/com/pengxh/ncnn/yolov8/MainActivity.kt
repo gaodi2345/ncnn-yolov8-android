@@ -68,7 +68,9 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         binding.surfaceView.holder.setFormat(PixelFormat.RGBA_8888)
         binding.surfaceView.holder.addCallback(this)
 
-        loadModelFromAssets(1)
+//        loadModelFromAssets(1)
+        yolov8ncnn.loadMultiModel(assets, intArrayOf(0, 2), currentProcessor)
+        yolov8ncnn.updateYoloState(YoloStateConst.PARTITION)
     }
 
     override fun initViewBinding(): ActivityMainBinding {

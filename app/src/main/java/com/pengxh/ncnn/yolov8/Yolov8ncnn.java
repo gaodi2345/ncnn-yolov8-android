@@ -6,6 +6,8 @@ import android.view.Surface;
 public class Yolov8ncnn {
     public native boolean loadModel(AssetManager mgr, int model_id, int processor);
 
+    public native boolean loadMultiModel(AssetManager mgr, int[] ids, int processor);
+
     public native boolean openCamera(int facing);
 
     public native boolean closeCamera();

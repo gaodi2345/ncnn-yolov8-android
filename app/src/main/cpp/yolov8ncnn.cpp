@@ -220,6 +220,45 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadModel(JNIEnv *env, jobject thiz, jobj
 }
 
 JNIEXPORT jboolean JNICALL
+Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadMultiModel(JNIEnv *env, jobject thiz,
+                                                      jobject assetManager,
+                                                      jintArray ids, jint processor) {
+    AAssetManager *mgr = AAssetManager_fromJava(env, assetManager);
+
+    jint *intArray = env->GetIntArrayElements(ids, nullptr);
+    jsize len = env->GetArrayLength(ids);
+    for (int i = 0; i < len; i++) {
+        int *id = intArray + i;
+        const char *model_type = model_types[*id];
+        int target_size = target_sizes[*id];
+        bool use_gpu = (int) processor == 1;
+
+        {
+            ncnn::MutexLockGuard g(lock);
+
+            if (use_gpu && ncnn::get_gpu_count() == 0) {
+                // no gpu
+                delete g_yolo;
+                g_yolo = nullptr;
+            } else {
+                if (!g_yolo)
+                    g_yolo = new Yolo;
+                g_yolo->load(
+                        mgr,
+                        model_type,
+                        target_size,
+                        mean_values[*id],
+                        norm_values[*id],
+                        use_gpu
+                );
+            }
+        }
+    }
+
+    return JNI_TRUE;
+}
+
+JNIEXPORT jboolean JNICALL
 Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_openCamera(JNIEnv *env, jobject thiz, jint facing) {
     if (facing < 0 || facing > 1)
         return JNI_FALSE;

@@ -364,18 +364,28 @@ Yolo::load(const char *model_type, int target_size, const float *mean_values,
 int
 Yolo::load(AAssetManager *mgr, const char *model_type, int _target_size, const float *_mean_values,
            const float *_norm_values, bool use_gpu) {
-    yolo.clear();
+    if (strcmp(model_type, "yolov8s-detect-sim-opt-fp16") != 0) {
+        yolo_s.clear();
+    } else {
+        yolo.clear();
+    }
+
     blob_pool_allocator.clear();
     workspace_pool_allocator.clear();
 
     ncnn::set_cpu_powersave(2);
     ncnn::set_omp_num_threads(ncnn::get_big_cpu_count());
 
+    yolo_s.opt = ncnn::Option();
     yolo.opt = ncnn::Option();
 
 #if NCNN_VULKAN
+    yolo_s.opt.use_vulkan_compute = use_gpu;
     yolo.opt.use_vulkan_compute = use_gpu;
 #endif
+    yolo_s.opt.num_threads = ncnn::get_big_cpu_count();
+    yolo_s.opt.blob_allocator = &blob_pool_allocator;
+    yolo_s.opt.workspace_allocator = &workspace_pool_allocator;
 
     yolo.opt.num_threads = ncnn::get_big_cpu_count();
     yolo.opt.blob_allocator = &blob_pool_allocator;
@@ -390,8 +400,14 @@ Yolo::load(AAssetManager *mgr, const char *model_type, int _target_size, const f
     __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "param_path %s", param_path);
     __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "model_path %s", model_path);
 
-    yolo.load_param(mgr, param_path);
-    yolo.load_model(mgr, model_path);
+    //model_type yolov8s-detect-sim-opt-fp16
+    if (strcmp(model_type, "yolov8s-detect-sim-opt-fp16") != 0) {
+        yolo_s.load_param(mgr, param_path);
+        yolo_s.load_model(mgr, model_path);
+    } else {
+        yolo.load_param(mgr, param_path);
+        yolo.load_model(mgr, model_path);
+    }
 
     target_size = _target_size;
     mean_values[0] = _mean_values[0];
@@ -483,114 +499,213 @@ int Yolo::partition(const cv::Mat &rgb, std::vector<Object> &objects, float prob
                                                      height, w, h);
 
         // pad to target_size rectangle
-        int wpad = (w + 31) / 32 * 32 - w;
-        int hpad = (h + 31) / 32 * 32 - h;
+        int w_pad = (w + 31) / 32 * 32 - w;
+        int h_pad = (h + 31) / 32 * 32 - h;
         ncnn::Mat in_pad;
-        ncnn::copy_make_border(in, in_pad, hpad / 2, hpad - hpad / 2, wpad / 2, wpad - wpad / 2,
+        ncnn::copy_make_border(in, in_pad, h_pad / 2, h_pad - h_pad / 2, w_pad / 2,
+                               w_pad - w_pad / 2,
                                ncnn::BORDER_CONSTANT, 0.f);
 
         in_pad.substract_mean_normalize(0, norm_values);
 
-        ncnn::Extractor ex = yolo.create_extractor();
-        ex.input("images", in_pad);
+        //分割
+        {
+            ncnn::Extractor ex = yolo_s.create_extractor();
+            ex.input("images", in_pad);
 
-        ncnn::Mat out;
-        ex.extract("output", out);
+            ncnn::Mat out;
+            ex.extract("output", out);
 
-        ncnn::Mat mask_proto;
-        ex.extract("seg", mask_proto);
+            ncnn::Mat mask_proto;
+            ex.extract("seg", mask_proto);
 
-        std::vector<int> strides = {8, 16, 32};
-        std::vector<GridAndStride> grid_strides;
-        generate_grids_and_stride(in_pad.w, in_pad.h, strides, grid_strides);
+            std::vector<int> strides = {8, 16, 32};
+            std::vector<GridAndStride> grid_strides;
+            generate_grids_and_stride(in_pad.w, in_pad.h, strides, grid_strides);
 
-        std::vector<Object> proposals;
-        std::vector<Object> objects8;
-        generate_proposals(grid_strides, out, prob_threshold, objects8, 6);
+            std::vector<Object> proposals;
+            std::vector<Object> objects8;
+            generate_proposals(grid_strides, out, prob_threshold, objects8, 6);
 
-        proposals.insert(proposals.end(), objects8.begin(), objects8.end());
+            proposals.insert(proposals.end(), objects8.begin(), objects8.end());
 
-        // sort all proposals by score from highest to lowest
-        qsort_descent_inplace(proposals);
+            // sort all proposals by score from highest to lowest
+            qsort_descent_inplace(proposals);
 
-        // apply nms with nms_threshold
-        std::vector<int> picked;
-        nms_sorted_bboxes(proposals, picked, nms_threshold);
+            // apply nms with nms_threshold
+            std::vector<int> picked;
+            nms_sorted_bboxes(proposals, picked, nms_threshold);
 
-        int count = picked.size();
+            int count = picked.size();
 
-        ncnn::Mat mask_feat = ncnn::Mat(32, count, sizeof(float));
-        for (int i = 0; i < count; i++) {
-            float *mask_feat_ptr = mask_feat.row(i);
-            std::memcpy(mask_feat_ptr, proposals[picked[i]].mask_feat.data(),
-                        sizeof(float) * proposals[picked[i]].mask_feat.size());
-        }
+            ncnn::Mat mask_feat = ncnn::Mat(32, count, sizeof(float));
+            for (int i = 0; i < count; i++) {
+                float *mask_feat_ptr = mask_feat.row(i);
+                std::memcpy(mask_feat_ptr, proposals[picked[i]].mask_feat.data(),
+                            sizeof(float) * proposals[picked[i]].mask_feat.size());
+            }
 
-        ncnn::Mat mask_pred_result;
-        decode_mask(mask_feat, width, height, mask_proto, in_pad, wpad, hpad, mask_pred_result);
+            ncnn::Mat mask_pred_result;
+            decode_mask(mask_feat, width, height, mask_proto, in_pad, w_pad, h_pad,
+                        mask_pred_result);
 
-        objects.resize(count);
-        for (int i = 0; i < count; i++) {
-            objects[i] = proposals[picked[i]];
+            objects.resize(count);
+            for (int i = 0; i < count; i++) {
+                objects[i] = proposals[picked[i]];
 
-            // adjust offset to original unpadded
-            float x0 = (objects[i].rect.x - (wpad / 2)) / scale;
-            float y0 = (objects[i].rect.y - (hpad / 2)) / scale;
-            float x1 = (objects[i].rect.x + objects[i].rect.width - (wpad / 2)) / scale;
-            float y1 = (objects[i].rect.y + objects[i].rect.height - (hpad / 2)) / scale;
+                // adjust offset to original unpadded
+                float x0 = (objects[i].rect.x - (w_pad / 2)) / scale;
+                float y0 = (objects[i].rect.y - (h_pad / 2)) / scale;
+                float x1 = (objects[i].rect.x + objects[i].rect.width - (w_pad / 2)) / scale;
+                float y1 = (objects[i].rect.y + objects[i].rect.height - (h_pad / 2)) / scale;
 
-            // clip
-            x0 = std::max(std::min(x0, (float) (width - 1)), 0.f);
-            y0 = std::max(std::min(y0, (float) (height - 1)), 0.f);
-            x1 = std::max(std::min(x1, (float) (width - 1)), 0.f);
-            y1 = std::max(std::min(y1, (float) (height - 1)), 0.f);
+                // clip
+                x0 = std::max(std::min(x0, (float) (width - 1)), 0.f);
+                y0 = std::max(std::min(y0, (float) (height - 1)), 0.f);
+                x1 = std::max(std::min(x1, (float) (width - 1)), 0.f);
+                y1 = std::max(std::min(y1, (float) (height - 1)), 0.f);
 
-            objects[i].rect.x = x0;
-            objects[i].rect.y = y0;
-            objects[i].rect.width = x1 - x0;
-            objects[i].rect.height = y1 - y0;
+                objects[i].rect.x = x0;
+                objects[i].rect.y = y0;
+                objects[i].rect.width = x1 - x0;
+                objects[i].rect.height = y1 - y0;
 
-            objects[i].mask = cv::Mat::zeros(height, width, CV_32FC1);
-            cv::Mat mask = cv::Mat(height, width, CV_32FC1, (float *) mask_pred_result.channel(i));
-            mask(objects[i].rect).copyTo(objects[i].mask(objects[i].rect));
-        }
+                objects[i].mask = cv::Mat::zeros(height, width, CV_32FC1);
+                cv::Mat mask = cv::Mat(height, width, CV_32FC1,
+                                       (float *) mask_pred_result.channel(i));
+                mask(objects[i].rect).copyTo(objects[i].mask(objects[i].rect));
+            }
 
-        JNIEnv *env;
-        javaVM->AttachCurrentThread(&env, nullptr);
-        jclass callback_clazz = env->GetObjectClass(j_callback);
+            JNIEnv *env;
+            javaVM->AttachCurrentThread(&env, nullptr);
+            jclass callback_clazz = env->GetObjectClass(j_callback);
 
-        jmethodID j_method_id = env->GetMethodID(
-                callback_clazz, "onPartition", "(Ljava/util/ArrayList;)V"
-        );
-
-        //获取ArrayList类
-        jclass list_clazz = env->FindClass("java/util/ArrayList");
-        jmethodID arraylist_init = env->GetMethodID(list_clazz, "<init>", "()V");
-        jmethodID arraylist_add = env->GetMethodID(list_clazz, "add", "(Ljava/lang/Object;)Z");
-        //初始化ArrayList对象
-        jobject arraylist_obj = env->NewObject(list_clazz, arraylist_init);
-
-        for (const auto &item: objects) {
-            float array[4];
-            array[0] = item.rect.x;
-            array[1] = item.rect.y;
-            array[2] = item.rect.width;
-            array[3] = item.rect.height;
-
-            char text[256];
-            sprintf(
-                    text,
-                    "%d %f %f %f %f %.1f%%",
-                    item.label,
-                    array[0], array[1], array[2], array[3],
-                    item.prob * 100
+            jmethodID j_method_id = env->GetMethodID(
+                    callback_clazz, "onPartition", "(Ljava/util/ArrayList;)V"
             );
 
-            //add
-            env->CallBooleanMethod(arraylist_obj, arraylist_add, env->NewStringUTF(text));
+            //获取ArrayList类
+            jclass list_clazz = env->FindClass("java/util/ArrayList");
+            jmethodID arraylist_init = env->GetMethodID(list_clazz, "<init>", "()V");
+            jmethodID arraylist_add = env->GetMethodID(list_clazz, "add", "(Ljava/lang/Object;)Z");
+            //初始化ArrayList对象
+            jobject arraylist_obj = env->NewObject(list_clazz, arraylist_init);
+
+            for (const auto &item: objects) {
+                float array[4];
+                array[0] = item.rect.x;
+                array[1] = item.rect.y;
+                array[2] = item.rect.width;
+                array[3] = item.rect.height;
+
+                char text[256];
+                sprintf(
+                        text,
+                        "%d %f %f %f %f %.1f%%",
+                        item.label,
+                        array[0], array[1], array[2], array[3],
+                        item.prob * 100
+                );
+
+                //add
+                env->CallBooleanMethod(arraylist_obj, arraylist_add, env->NewStringUTF(text));
+            }
+            //回调
+            env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
         }
-        //回调
-        env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
+
+        //检测
+        {
+            ncnn::Extractor ex = yolo.create_extractor();
+
+            ex.input("images", in_pad);
+
+            std::vector<Object> proposals;
+
+            ncnn::Mat out;
+            ex.extract("output", out);
+
+            std::vector<int> strides = {8, 16, 32}; // might have stride=64
+            std::vector<GridAndStride> grid_strides;
+            generate_grids_and_stride(in_pad.w, in_pad.h, strides, grid_strides);
+            generate_proposals(grid_strides, out, 0.4f, proposals, 43);
+
+            // sort all proposals by score from highest to lowest
+            qsort_descent_inplace(proposals);
+
+            // apply nms with nms_threshold
+            std::vector<int> picked;
+            nms_sorted_bboxes(proposals, picked, 0.5f);
+
+            int count = picked.size();
+
+            objects.resize(count);
+            for (int i = 0; i < count; i++) {
+                objects[i] = proposals[picked[i]];
+
+                // adjust offset to original unpadded
+                float x0 = (objects[i].rect.x - (w_pad / 2)) / scale;
+                float y0 = (objects[i].rect.y - (h_pad / 2)) / scale;
+                float x1 = (objects[i].rect.x + objects[i].rect.width - (w_pad / 2)) / scale;
+                float y1 = (objects[i].rect.y + objects[i].rect.height - (h_pad / 2)) / scale;
+
+                // clip
+                x0 = std::max(std::min(x0, (float) (width - 1)), 0.f);
+                y0 = std::max(std::min(y0, (float) (height - 1)), 0.f);
+                x1 = std::max(std::min(x1, (float) (width - 1)), 0.f);
+                y1 = std::max(std::min(y1, (float) (height - 1)), 0.f);
+
+                objects[i].rect.x = x0;
+                objects[i].rect.y = y0;
+                objects[i].rect.width = x1 - x0;
+                objects[i].rect.height = y1 - y0;
+            }
+
+            // sort objects by area
+            struct {
+                bool operator()(const Object &a, const Object &b) const {
+                    return a.rect.area() > b.rect.area();
+                }
+            } objects_area_greater;
+            std::sort(objects.begin(), objects.end(), objects_area_greater);
+
+            JNIEnv *env;
+            javaVM->AttachCurrentThread(&env, nullptr);
+            jclass callback_clazz = env->GetObjectClass(j_callback);
+
+            jmethodID j_method_id = env->GetMethodID(
+                    callback_clazz, "onDetect", "(Ljava/util/ArrayList;)V"
+            );
+
+            //获取ArrayList类
+            jclass list_clazz = env->FindClass("java/util/ArrayList");
+            jmethodID arraylist_init = env->GetMethodID(list_clazz, "<init>", "()V");
+            jmethodID arraylist_add = env->GetMethodID(list_clazz, "add", "(Ljava/lang/Object;)Z");
+            //初始化ArrayList对象
+            jobject arraylist_obj = env->NewObject(list_clazz, arraylist_init);
+
+            for (const auto &item: objects) {
+                float array[4];
+                array[0] = item.rect.x;
+                array[1] = item.rect.y;
+                array[2] = item.rect.width;
+                array[3] = item.rect.height;
+
+                char text[256];
+                sprintf(
+                        text,
+                        "%d %f %f %f %f %.1f%%",
+                        item.label,
+                        array[0], array[1], array[2], array[3],
+                        item.prob * 100
+                );
+
+                //add
+                env->CallBooleanMethod(arraylist_obj, arraylist_add, env->NewStringUTF(text));
+            }
+            //回调
+            env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
+        }
     }
     return 0;
 }

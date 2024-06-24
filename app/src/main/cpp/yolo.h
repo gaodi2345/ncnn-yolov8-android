@@ -88,6 +88,7 @@ public:
     int draw_mask(cv::Mat &rgb, const std::vector<Object> &objects);
 
 private:
+    ncnn::Net yolo_s;
     ncnn::Net yolo;
     int target_size;
     float mean_values[3];
