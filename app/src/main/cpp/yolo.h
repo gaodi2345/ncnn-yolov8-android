@@ -44,19 +44,16 @@ public:
      * 2 - 检测 <br>
      * 3 - 绘制 <br>
      * */
-    int state = 0;
-
-    int load(const char *model_type,
-             int target_size,
-             const float *mean_values,
-             const float *norm_values,
-             bool use_gpu = false);
+    int j_state = 0;
 
     int load(AAssetManager *mgr,
              const char *model_type,
              int target_size,
              const float *mean_values,
              const float *norm_values,
+             bool use_classify,
+             bool use_segmentation,
+             bool use_detect,
              bool use_gpu = false);
 
     void initNativeCallback(JavaVM *vm, jlong nativeObjAddr, jobject pJobject);
@@ -88,8 +85,12 @@ public:
     int draw_mask(cv::Mat &rgb, const std::vector<Object> &objects);
 
 private:
+    //分类
+    ncnn::Net yolo_c;
+    //分割
     ncnn::Net yolo_s;
-    ncnn::Net yolo;
+    //检测
+    ncnn::Net yolo_d;
     int target_size;
     float mean_values[3];
     float norm_values[3];

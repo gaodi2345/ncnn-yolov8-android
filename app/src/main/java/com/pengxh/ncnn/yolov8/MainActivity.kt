@@ -6,9 +6,7 @@ import android.graphics.PixelFormat
 import android.os.Bundle
 import android.util.Log
 import android.view.SurfaceHolder
-import android.view.View
 import android.view.WindowManager
-import android.widget.AdapterView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.pengxh.kt.lite.base.KotlinBaseActivity
@@ -31,33 +29,10 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
      * */
     private val classArray = arrayOf("电线整洁", "电线杂乱", "餐馆厨房")
     private var facing = 1
-    private var currentProcessor = 0
     private var isShowing = false
 
     override fun initEvent() {
-        binding.processorSpinner.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(
-                    arg0: AdapterView<*>?, arg1: View, position: Int, id: Long
-                ) {
-                    if (position != currentProcessor) {
-                        currentProcessor = position
-                        loadModelFromAssets(1)
-                    }
-                }
 
-                override fun onNothingSelected(arg0: AdapterView<*>?) {}
-            }
-    }
-
-    /**
-     * index对应 JNI 里面定义的数组角标
-     * */
-    private fun loadModelFromAssets(index: Int) {
-        val result = yolov8ncnn.loadModel(assets, index, currentProcessor)
-        if (!result) {
-            Log.d(kTag, "reload: yolov8ncnn loadModel failed")
-        }
     }
 
     override fun initOnCreate(savedInstanceState: Bundle?) {
@@ -68,9 +43,8 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         binding.surfaceView.holder.setFormat(PixelFormat.RGBA_8888)
         binding.surfaceView.holder.addCallback(this)
 
-//        loadModelFromAssets(1)
-        yolov8ncnn.loadMultiModel(assets, intArrayOf(0, 2), currentProcessor)
-        yolov8ncnn.updateYoloState(YoloStateConst.SEGMENTATION)
+//        yolov8ncnn.loadModel(assets, 1, false, true, false, false)
+        yolov8ncnn.loadMultiModel(assets, intArrayOf(0, 2), false)
     }
 
     override fun initViewBinding(): ActivityMainBinding {
@@ -116,8 +90,14 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
                         AlertControlDialog.OnDialogButtonClickListener {
                         override fun onConfirmClick() {
                             //更换为检测模型
-                            loadModelFromAssets(2)
-                            yolov8ncnn.updateYoloState(YoloStateConst.DETECT)
+                            yolov8ncnn.loadModel(
+                                assets,
+                                2,
+                                false,
+                                false,
+                                false,
+                                true
+                            )
                         }
 
                         override fun onCancelClick() {

@@ -356,18 +356,20 @@ Yolo::Yolo() {
 }
 
 int
-Yolo::load(const char *model_type, int target_size, const float *mean_values,
-           const float *norm_values, bool use_gpu) {
-
-}
-
-int
 Yolo::load(AAssetManager *mgr, const char *model_type, int _target_size, const float *_mean_values,
-           const float *_norm_values, bool use_gpu) {
-    if (strcmp(model_type, "yolov8s-detect-sim-opt-fp16") != 0) {
+           const float *_norm_values, bool use_classify, bool use_segmentation, bool use_detect,
+           bool use_gpu) {
+    if (use_classify) {
+        yolo_c.clear();
+        __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "yolo_c.clear()");
+    }
+    if (use_segmentation) {
         yolo_s.clear();
-    } else {
-        yolo.clear();
+        __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "yolo_s.clear()");
+    }
+    if (use_detect) {
+        yolo_d.clear();
+        __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "yolo_d.clear()");
     }
 
     blob_pool_allocator.clear();
@@ -376,20 +378,26 @@ Yolo::load(AAssetManager *mgr, const char *model_type, int _target_size, const f
     ncnn::set_cpu_powersave(2);
     ncnn::set_omp_num_threads(ncnn::get_big_cpu_count());
 
+    yolo_c.opt = ncnn::Option();
     yolo_s.opt = ncnn::Option();
-    yolo.opt = ncnn::Option();
+    yolo_d.opt = ncnn::Option();
 
 #if NCNN_VULKAN
+    yolo_c.opt.use_vulkan_compute = use_gpu;
     yolo_s.opt.use_vulkan_compute = use_gpu;
-    yolo.opt.use_vulkan_compute = use_gpu;
+    yolo_d.opt.use_vulkan_compute = use_gpu;
 #endif
+    yolo_c.opt.num_threads = ncnn::get_big_cpu_count();
+    yolo_c.opt.blob_allocator = &blob_pool_allocator;
+    yolo_c.opt.workspace_allocator = &workspace_pool_allocator;
+
     yolo_s.opt.num_threads = ncnn::get_big_cpu_count();
     yolo_s.opt.blob_allocator = &blob_pool_allocator;
     yolo_s.opt.workspace_allocator = &workspace_pool_allocator;
 
-    yolo.opt.num_threads = ncnn::get_big_cpu_count();
-    yolo.opt.blob_allocator = &blob_pool_allocator;
-    yolo.opt.workspace_allocator = &workspace_pool_allocator;
+    yolo_d.opt.num_threads = ncnn::get_big_cpu_count();
+    yolo_d.opt.blob_allocator = &blob_pool_allocator;
+    yolo_d.opt.workspace_allocator = &workspace_pool_allocator;
 
     char param_path[256];
     char model_path[256];
@@ -397,16 +405,23 @@ Yolo::load(AAssetManager *mgr, const char *model_type, int _target_size, const f
     sprintf(param_path, "%s.param", model_type);
     sprintf(model_path, "%s.bin", model_type);
 
-    __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "param_path %s", param_path);
-    __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "model_path %s", model_path);
-
-    //model_type yolov8s-detect-sim-opt-fp16
-    if (strcmp(model_type, "yolov8s-detect-sim-opt-fp16") != 0) {
+    if (use_classify) {
+        yolo_c.load_param(mgr, param_path);
+        yolo_c.load_model(mgr, model_path);
+        __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "yolo_c load param %s", param_path);
+        __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "yolo_c load model %s", model_path);
+    }
+    if (use_segmentation) {
         yolo_s.load_param(mgr, param_path);
         yolo_s.load_model(mgr, model_path);
-    } else {
-        yolo.load_param(mgr, param_path);
-        yolo.load_model(mgr, model_path);
+        __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "yolo_s load param %s", param_path);
+        __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "yolo_s load model %s", model_path);
+    }
+    if (use_detect) {
+        yolo_d.load_param(mgr, param_path);
+        yolo_d.load_model(mgr, model_path);
+        __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "yolo_d load param %s", param_path);
+        __android_log_print(ANDROID_LOG_DEBUG, "ncnn", "yolo_d load model %s", model_path);
     }
 
     target_size = _target_size;
@@ -434,7 +449,7 @@ void Yolo::initNativeCallback(JavaVM *vm, jlong nativeObjAddr, jobject pJobject)
 }
 
 int Yolo::classify(const cv::Mat &rgb) {
-    if (state == 0) {
+    if (j_state == 0) {
         static const float scale_values[3] = {0.017f, 0.017f, 0.017f};
 
         int width = rgb.cols;
@@ -446,7 +461,7 @@ int Yolo::classify(const cv::Mat &rgb) {
         std::vector<float> cls_scores;
         {
             in.substract_mean_normalize(mean_values, scale_values);
-            ncnn::Extractor ex = yolo.create_extractor();
+            ncnn::Extractor ex = yolo_c.create_extractor();
             ex.input("images", in);
 
             ncnn::Mat out;
@@ -477,7 +492,7 @@ int Yolo::classify(const cv::Mat &rgb) {
 
 int Yolo::segmentation(const cv::Mat &rgb, std::vector<Object> &objects, float prob_threshold,
                        float nms_threshold) {
-    if (state == 1) {
+    if (j_state == 1) {
         int width = rgb.cols;
         int height = rgb.rows;
 
@@ -614,7 +629,7 @@ int Yolo::segmentation(const cv::Mat &rgb, std::vector<Object> &objects, float p
 
         //检测
         {
-            ncnn::Extractor ex = yolo.create_extractor();
+            ncnn::Extractor ex = yolo_d.create_extractor();
 
             ex.input("images", in_pad);
 
@@ -696,7 +711,7 @@ int Yolo::segmentation(const cv::Mat &rgb, std::vector<Object> &objects, float p
 
 int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_threshold,
                  float nms_threshold) {
-    if (state == 2) {
+    if (j_state == 2) {
         int width = rgb.cols;
         int height = rgb.rows;
 
@@ -730,7 +745,7 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
 
         in_pad.substract_mean_normalize(0, norm_values);
 
-        ncnn::Extractor ex = yolo.create_extractor();
+        ncnn::Extractor ex = yolo_d.create_extractor();
 
         ex.input("images", in_pad);
 

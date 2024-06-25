@@ -128,7 +128,7 @@ void MyNdkCamera::on_image_render(cv::Mat &rgb) const {
             std::vector<Object> objects;
 
             //分割
-            g_yolo->partition(rgb, objects);
+            g_yolo->segmentation(rgb, objects);
 
             //检测
             g_yolo->detect(rgb, objects);
@@ -184,8 +184,10 @@ JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
 
 JNIEXPORT jboolean JNICALL
 Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadModel(JNIEnv *env, jobject thiz, jobject assetManager,
-                                                 jint model_id, jint processor) {
-    if (model_id < 0 || model_id > 2 || processor < 0 || processor > 1) {
+                                                 jint model_id, jboolean use_gpu,
+                                                 jboolean use_classify, jboolean use_segmentation,
+                                                 jboolean use_detect) {
+    if (model_id < 0 || model_id > 2) {
         return JNI_FALSE;
     }
 
@@ -193,7 +195,6 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadModel(JNIEnv *env, jobject thiz, jobj
 
     const char *model_type = model_types[(int) model_id];
     int target_size = target_sizes[(int) model_id];
-    bool use_gpu = (int) processor == 1;
 
     // reload
     {
@@ -206,12 +207,27 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadModel(JNIEnv *env, jobject thiz, jobj
         } else {
             if (!g_yolo)
                 g_yolo = new Yolo;
+            int state;
+            if (use_classify) {
+                state = 0;
+            }
+            if (use_segmentation) {
+                state = 1;
+            }
+            if (use_detect) {
+                state = 2;
+            }
+            g_yolo->j_state = state;
             g_yolo->load(
                     mgr,
                     model_type,
                     target_size,
                     mean_values[(int) model_id],
-                    norm_values[(int) model_id], use_gpu
+                    norm_values[(int) model_id],
+                    use_classify,
+                    use_segmentation,
+                    use_detect,
+                    use_gpu
             );
         }
     }
@@ -222,7 +238,7 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadModel(JNIEnv *env, jobject thiz, jobj
 JNIEXPORT jboolean JNICALL
 Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadMultiModel(JNIEnv *env, jobject thiz,
                                                       jobject assetManager,
-                                                      jintArray ids, jint processor) {
+                                                      jintArray ids, jboolean use_gpu) {
     AAssetManager *mgr = AAssetManager_fromJava(env, assetManager);
 
     jint *intArray = env->GetIntArrayElements(ids, nullptr);
@@ -231,7 +247,6 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadMultiModel(JNIEnv *env, jobject thiz,
         int *id = intArray + i;
         const char *model_type = model_types[*id];
         int target_size = target_sizes[*id];
-        bool use_gpu = (int) processor == 1;
 
         {
             ncnn::MutexLockGuard g(lock);
@@ -243,14 +258,32 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadMultiModel(JNIEnv *env, jobject thiz,
             } else {
                 if (!g_yolo)
                     g_yolo = new Yolo;
-                g_yolo->load(
-                        mgr,
-                        model_type,
-                        target_size,
-                        mean_values[*id],
-                        norm_values[*id],
-                        use_gpu
-                );
+                g_yolo->j_state = 1;
+                if (*id == 0) {
+                    g_yolo->load(
+                            mgr,
+                            model_type,
+                            target_size,
+                            mean_values[*id],
+                            norm_values[*id],
+                            false,
+                            true,
+                            false,
+                            use_gpu
+                    );
+                } else {
+                    g_yolo->load(
+                            mgr,
+                            model_type,
+                            target_size,
+                            mean_values[*id],
+                            norm_values[*id],
+                            false,
+                            false,
+                            true,
+                            use_gpu
+                    );
+                }
             }
         }
     }
@@ -288,12 +321,6 @@ Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_setOutputWindow(JNIEnv *env, jobject thiz
     g_camera->set_window(win);
 
     g_yolo->initNativeCallback(javaVM, nativeObjAddr, native_callback);
-    return JNI_TRUE;
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_updateYoloState(JNIEnv *env, jobject thiz, jint yolo_state) {
-    g_yolo->state = yolo_state;
     return JNI_TRUE;
 }
 }
