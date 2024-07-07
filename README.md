@@ -311,13 +311,17 @@ public class Yolov8ncnn {
         System.loadLibrary("yolov8ncnn");
     }
 
-    public native boolean loadModel(AssetManager mgr, int model_id, int processor);
+    //单模型
+    public native boolean loadModel(AssetManager mgr, int model_id, boolean use_gpu, boolean use_classify, boolean use_segmentation, boolean use_detect);
+
+    //多模型
+    public native boolean loadMultiModel(AssetManager mgr, int[] ids, boolean use_gpu);
 
     public native boolean openCamera(int facing);
 
     public native boolean closeCamera();
 
-    public native boolean setOutputWindow(Surface surface, DetectResult input, long nativeObjAddr, INativeCallback nativeCallback);
+    public native boolean setOutputWindow(Surface surface, long nativeObjAddr, INativeCallback nativeCallback);
 }
 ```
 
@@ -353,16 +357,16 @@ target_link_libraries(yolov8ncnn ncnn ${OpenCV_LIBS} camera2ndk mediandk)
 
 复制过去的yolov8ncnn.cpp文件，有四个函数一定是没有高亮的，如下图：
 
-![微信截图_20240604101848.png](imags/微信截图_20240604101848.png)
+![微信截图_20240707213433.png](imags/微信截图_20240707213433.png)
 
 此时需要将此函数根据情况修改为自己项目包名_函数名的方式，”.“用”_
 “代替，比如：com.casic.test.Yolov8ncnn应改为Java_com_casic_test_Yolov8ncnn，改了之后就会发现，这四个函数已经高亮了，说明桥接代码已经生效。
 
 * Java
-  ![微信截图_20240604093515.png](imags/微信截图_20240604093515.png)
+  ![微信截图_20240707214218.png](imags/微信截图_20240707214218.png)
 
 * Cpp
-  ![微信截图_20240604101047.png](imags/微信截图_20240604101047.png)
+  ![微信截图_20240707214345.png](imags/微信截图_20240707214345.png)
 
 可以看到Java和C++代码左侧已经出现相对应的代码标识。另外还有两个文件，就是setOutputWindow方法里面的DetectResult和INativeCallback，这俩都属于回调部分的代码，一个是数据模型类，一个是回调接口，直接复制即可。
 
@@ -392,27 +396,27 @@ Project“，再”Build-Refresh Linked C++ Projects“，最后关闭工程重�
 将model_types、target_sizes、mean_values、norm_values改为如下代码：
 
 ```cpp
-    const char *model_types[] = {"s-detect-sim-opt-fp16"};
-
-    const int target_sizes[] = {320};
-
-    const float mean_values[][3] = {
-            {103.53f, 116.28f, 123.675f}
-    };
-
-    const float norm_values[][3] = {
-            {1 / 255.f, 1 / 255.f, 1 / 255.f}
-    };
+//分割、分类、检测
+const char *model_types[] = {"best-sim-opt-fp16", "model.ncnn", "yolov8s-detect-sim-opt-fp16"};
+const int target_sizes[] = {320, 320, 320};
+const float mean_values[][3] = {
+        {103.53f, 116.28f, 123.675f},
+        {103.53f, 116.28f, 123.675f},
+        {103.53f, 116.28f, 123.675f}
+};
+const float norm_values[][3] = {
+        {1 / 255.f, 1 / 255.f, 1 / 255.f},
+        {1 / 255.f, 1 / 255.f, 1 / 255.f},
+        {1 / 255.f, 1 / 255.f, 1 / 255.f}
+};
 ```
 
-其中model_types里面的值是你yolov8模型去掉前缀以及后缀剩下的部分，比如：yolov8**s-detect-sim-opt-fp16**
-.bin
-的值应该是 s-detect-sim-opt-fp16，一定要注意，否则会报错，找不到模型。
+其中model_types里面的值是你yolov8模型去掉后缀后剩下的部分，一定要注意，否则会报错，找不到模型。
 
 * 修改Java_com_casic_test_Yolov8ncnn_setOutputWindow方法（同样注意包名），在return前面加一行代码：
 
 ```cpp
-g_yolo->initNativeCallback(javaVM, input, nativeObjAddr, native_callback);
+g_yolo->initNativeCallback(javaVM, nativeObjAddr, native_callback);
 ```
 
 以上这些，我在代码里面已经加好，注意下就可以了。有个值得注意的地方，在此文件的on_image_render函数，里面的注释我也写清楚了，可以根据需求选择draw和draw_fps，如果不需要，可以都注释掉，不影响后面的逻辑。
@@ -423,8 +427,6 @@ g_yolo->initNativeCallback(javaVM, input, nativeObjAddr, native_callback);
 
 ```cpp
     JavaVM *javaVM;
-    //输出结果类
-    jobject j_output;
     //Java传过来的Mat对象内存地址
     jlong j_mat_addr;
     //回调类
@@ -434,7 +436,7 @@ g_yolo->initNativeCallback(javaVM, input, nativeObjAddr, native_callback);
 * 添加Java/C++初始化函数
 
 ```cpp
-void initNativeCallback(JavaVM *vm, jobject result, jlong nativeObjAddr, jobject pJobject);
+void initNativeCallback(JavaVM *vm, jlong nativeObjAddr, jobject pJobject);
 ```
 
 #### 6.3、修改Yolo.cpp
@@ -458,9 +460,6 @@ void Yolo::initNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, jo
      * */
     JNIEnv *env;
     vm->AttachCurrentThread(&env, nullptr);
-    //此时input转为output
-    j_output = env->NewGlobalRef(input);
-
     j_mat_addr = nativeObjAddr;
 
     j_callback = env->NewGlobalRef(pJobject);
@@ -534,38 +533,37 @@ void Yolo::initNativeCallback(JavaVM *vm, jobject input, jlong nativeObjAddr, jo
     JNIEnv *env;
     javaVM->AttachCurrentThread(&env, nullptr);
     jclass callback_clazz = env->GetObjectClass(j_callback);
-    jclass output_clazz = env->GetObjectClass(j_output);
 ```
 
 注意：JNIEnv不支持跨线程，所以必须通过之前定义的全局指针变量 javaVM 得到当前线程的JNIEnv。
 
-2. 获取Java代码的回调接口里面的入参，得到回调入参的jclass
-
-```cpp
-    jclass output_clazz = env->GetObjectClass(j_output);
-```
-
-3. 根据或取到的jclass获取接口回调方法名，得到jmethodID
+2. 根据或取到的jclass获取接口回调方法名，得到jmethodID
 
 ```cpp
 jmethodID j_method_id = env->GetMethodID(callback_clazz, "onDetect", "(Ljava/util/ArrayList;)V");
 ```
 
-4. 给回调入参的jobject设置值。此处只举个复杂点例子，基本类型的很简单就不展示了，具体返回值要看自己的逻辑
+3. 给回调入参的jobject设置值。此处只举个复杂点例子，基本类型的很简单就不展示了，具体返回值要看自己的逻辑
 
 ```cpp
-        jfieldID position = env->GetFieldID(output_clazz, "position", "[F");
-        float array[4];
-        array[0] = item.rect.x;
-        array[1] = item.rect.y;
-        array[2] = item.rect.width;
-        array[3] = item.rect.height;
-        jfloatArray rectArray = env->NewFloatArray(4);
-        env->SetFloatArrayRegion(rectArray, 0, 4, array);
-        env->SetObjectField(j_output, position, rectArray);
+        for (const auto &item: objects) {
+            float array[6];
+            array[0] = item.rect.x;
+            array[1] = item.rect.y;
+            array[2] = item.rect.width;
+            array[3] = item.rect.height;
+            array[4] = (float) item.label;
+            array[5] = item.prob * 100;
+
+            jfloatArray result_array = env->NewFloatArray(6);
+            env->SetFloatArrayRegion(result_array, 0, 6, array);
+
+            //add
+            env->CallBooleanMethod(arraylist_obj, arraylist_add, result_array);
+        }
 ```
 
-上面的代码意思是给float[]赋值，从签名”[F“可以看出来
+上面的代码意思是给float[]赋值，从签名”[F“可以看出来，然后将float[]数组通过反射添加进ArrayList
 
 5. 发起回调
 
@@ -583,22 +581,7 @@ env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);
 
 修改 app/src/main/res/layout/[activity_main.xml](app/src/main/res/layout/activity_main.xml) 如下：
 
-![微信截图_20240604124845.png](imags/微信截图_20240604124845.png)
-
-报错的原因是没有配置此参数，在
-app/src/main/res/values/[strings.xml](app/src/main/res/values/strings.xml) 里面配置下就好了，如下：
-
-```xml
-
-<resources>
-    <string name="app_name">Test</string>
-
-    <string-array name="cpu_gpu_array">
-        <item>CPU</item>
-        <item>GPU</item>
-    </string-array>
-</resources>
-```
+![微信截图_20240707215753.png](imags/微信截图_20240707215753.png)
 
 #### 7.2、初始化Yolov8ncnn和矩阵Mat对象，懒汉模式
 
@@ -611,21 +594,14 @@ private val mat by lazy { Mat() }
 
 ```kotlin
 override fun initOnCreate(savedInstanceState: Bundle?) {
-    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+  window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-    OpenCVLoader.initLocal()
+  OpenCVLoader.initLocal()
 
-    binding.surfaceView.holder.setFormat(PixelFormat.RGBA_8888)
-    binding.surfaceView.holder.addCallback(this)
+  binding.surfaceView.holder.setFormat(PixelFormat.RGBA_8888)
+  binding.surfaceView.holder.addCallback(this)
 
-    reloadModel()
-}
-
-private fun reloadModel() {
-    val result = yolov8ncnn.loadModel(assets, currentModel, currentProcessor)
-    if (!result) {
-        Log.d(kTag, "reload: yolov8ncnn loadModel failed")
-    }
+  yolov8ncnn.loadModel(assets, 1, false, true, false, false)
 }
 ```
 
@@ -654,23 +630,46 @@ override fun onResume() {
 
 ```kotlin
 override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-    yolov8ncnn.setOutputWindow(holder.surface, DetectResult(), mat.nativeObjAddr, this)
+  yolov8ncnn.setOutputWindow(holder.surface, mat.nativeObjAddr, this)
 }
 ```
 
 #### 7.6、实现INativeCallback回调
 
 ```kotlin
-override fun onDetect(output: ArrayList<DetectResult>) {
-    Log.d(kTag, output.toJson())
-    binding.detectView.updateTargetPosition(output)
-    if (mat.width() > 0 || mat.height() > 0) {
-        val bitmap = Bitmap.createBitmap(mat.width(), mat.height(), Bitmap.Config.ARGB_8888)
-        Utils.matToBitmap(mat, bitmap, true)
-        bitmap.saveImage("${createImageFileDir()}/${System.currentTimeMillis()}.png")
-    } else {
-        Log.d(kTag, "width: ${mat.width()}, height: ${mat.height()}")
-    }
+override fun onDetect(output: ArrayList<FloatArray>) {
+  //转成泛型集合
+  val results = ArrayList<YoloResult>()
+  output.forEach {
+    /**
+     * 前四位是目标Rect，第五位是目标名对应的角标，第六位是可信度
+     *
+     * [135.88397,120.17752,68.061325,204.02115,28.0,43.642334]
+     * */
+    val yolo = YoloResult()
+
+    val array = FloatArray(4)
+    array[0] = it[0]
+    array[1] = it[1]
+    array[2] = it[2]
+    array[3] = it[3]
+    yolo.position = array
+
+    yolo.type = it[4].toInt()
+
+    yolo.prob = "${it[5]}%"
+    results.add(yolo)
+  }
+  Log.d(kTag, results.toJson())
+  binding.detectView.updateTargetPosition(results)
+
+  if (mat.width() > 0 || mat.height() > 0) {
+    val bitmap = Bitmap.createBitmap(mat.width(), mat.height(), Bitmap.Config.ARGB_8888)
+    Utils.matToBitmap(mat, bitmap, true)
+    bitmap.saveImage("${createImageFileDir()}/${System.currentTimeMillis()}.png")
+  } else {
+    Log.d(kTag, "width: ${mat.width()}, height: ${mat.height()}")
+  }
 }
 ```
 
@@ -701,12 +700,8 @@ override fun onPause() {
 自此，ncnn + yolov8 + opencv 这三个框架已完成在Android端的移植。将报错的地方先注释掉
 
 ```kotlin
-// binding.detectView.updateTargetPosition(output)
+// binding.detectView.updateTargetPosition(results)
 ```
-
-* 运行起来的效果如下：
-
-![20240604140816.png](imags/20240604140816.png)
 
 * 结果回调：
 
@@ -720,7 +715,7 @@ override fun onPause() {
 如果没有特殊要求，直接复制过去即可，但是需要将里面的 classNames 改为自己模型对应的类别，虽然不会报错，但是会显示成错误的类别，注意下就行了。
 然后修改app/src/main/res/layout/[activity_main.xml](app/src/main/res/layout/activity_main.xml)
 里面的内容如下：
-![微信截图_20240604142017.png](imags/微信截图_20240604142017.png)
+![微信截图_20240707220511.png](imags/微信截图_20240707220511.png)
 
 红框里面改成自己包名，然后编译运行即可。这样既方便了后续逻辑处理，也规避了C++不方便渲染中文的尴尬，效果如下：
 

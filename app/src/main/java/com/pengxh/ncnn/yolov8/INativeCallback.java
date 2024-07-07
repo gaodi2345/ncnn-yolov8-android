@@ -11,10 +11,10 @@ public interface INativeCallback {
     /**
      * 分割
      */
-    void onSegmentation(ArrayList<String> segmentationOutput, ArrayList<String> detectOutput);
+    void onSegmentation(ArrayList<float[]> segmentationOutput, ArrayList<float[]> detectOutput);
 
     /**
      * 检测
      */
-    void onDetect(ArrayList<String> output);
+    void onDetect(ArrayList<float[]> output);
 }

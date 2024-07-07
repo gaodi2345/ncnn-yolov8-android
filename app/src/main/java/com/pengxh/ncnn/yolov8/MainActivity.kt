@@ -111,24 +111,23 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
     }
 
     override fun onSegmentation(
-        segmentationOutput: ArrayList<String>, detectOutput: ArrayList<String>
+        segmentationOutput: ArrayList<FloatArray>, detectOutput: ArrayList<FloatArray>
     ) {
         //转成泛型集合
         val segmentationResults = ArrayList<YoloResult>()
         segmentationOutput.forEach {
             val yolo = YoloResult()
 
-            val strings = it.split(" ")
-            yolo.type = strings.first().toInt()
-
             val array = FloatArray(4)
-            array[0] = strings[1].toFloat()
-            array[1] = strings[2].toFloat()
-            array[2] = strings[3].toFloat()
-            array[3] = strings[4].toFloat()
+            array[0] = it[0]
+            array[1] = it[1]
+            array[2] = it[2]
+            array[3] = it[3]
             yolo.position = array
 
-            yolo.prob = strings.last()
+            yolo.type = it[4].toInt()
+
+            yolo.prob = "${it[5]}%"
             segmentationResults.add(yolo)
         }
 
@@ -136,39 +135,42 @@ class MainActivity : KotlinBaseActivity<ActivityMainBinding>(), SurfaceHolder.Ca
         detectOutput.forEach {
             val yolo = YoloResult()
 
-            val strings = it.split(" ")
-            yolo.type = strings.first().toInt()
-
             val array = FloatArray(4)
-            array[0] = strings[1].toFloat()
-            array[1] = strings[2].toFloat()
-            array[2] = strings[3].toFloat()
-            array[3] = strings[4].toFloat()
+            array[0] = it[0]
+            array[1] = it[1]
+            array[2] = it[2]
+            array[3] = it[3]
             yolo.position = array
 
-            yolo.prob = strings.last()
+            yolo.type = it[4].toInt()
+
+            yolo.prob = "${it[5]}%"
             detectResults.add(yolo)
         }
         binding.detectView.updateTargetPosition(segmentationResults, detectResults)
     }
 
-    override fun onDetect(output: ArrayList<String>) {
+    override fun onDetect(output: ArrayList<FloatArray>) {
         //转成泛型集合
         val results = ArrayList<YoloResult>()
         output.forEach {
+            /**
+             * 前四位是目标Rect，第五位是目标名对应的角标，第六位是可信度
+             *
+             * [135.88397,120.17752,68.061325,204.02115,28.0,43.642334]
+             * */
             val yolo = YoloResult()
 
-            val strings = it.split(" ")
-            yolo.type = strings.first().toInt()
-
             val array = FloatArray(4)
-            array[0] = strings[1].toFloat()
-            array[1] = strings[2].toFloat()
-            array[2] = strings[3].toFloat()
-            array[3] = strings[4].toFloat()
+            array[0] = it[0]
+            array[1] = it[1]
+            array[2] = it[2]
+            array[3] = it[3]
             yolo.position = array
 
-            yolo.prob = strings.last()
+            yolo.type = it[4].toInt()
+
+            yolo.prob = "${it[5]}%"
             results.add(yolo)
         }
         Log.d(kTag, results.toJson())

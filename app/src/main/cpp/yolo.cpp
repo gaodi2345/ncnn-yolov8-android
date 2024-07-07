@@ -607,23 +607,19 @@ int Yolo::segmentation(const cv::Mat &rgb, std::vector<Object> &objects, float p
             }
 
             for (const auto &item: objects) {
-                float array[4];
+                float array[6];
                 array[0] = item.rect.x;
                 array[1] = item.rect.y;
                 array[2] = item.rect.width;
                 array[3] = item.rect.height;
+                array[4] = (float) item.label;
+                array[5] = item.prob * 100;
 
-                char text[256];
-                sprintf(
-                        text,
-                        "%d %f %f %f %f %.1f%%",
-                        item.label,
-                        array[0], array[1], array[2], array[3],
-                        item.prob * 100
-                );
+                jfloatArray result_array = env->NewFloatArray(6);
+                env->SetFloatArrayRegion(result_array, 0, 6, array);
 
                 //add
-                env->CallBooleanMethod(segment_array_obj, arraylist_add, env->NewStringUTF(text));
+                env->CallBooleanMethod(segment_array_obj, arraylist_add, result_array);
             }
         }
 
@@ -683,23 +679,19 @@ int Yolo::segmentation(const cv::Mat &rgb, std::vector<Object> &objects, float p
             std::sort(objects.begin(), objects.end(), objects_area_greater);
 
             for (const auto &item: objects) {
-                float array[4];
+                float array[6];
                 array[0] = item.rect.x;
                 array[1] = item.rect.y;
                 array[2] = item.rect.width;
                 array[3] = item.rect.height;
+                array[4] = (float) item.label;
+                array[5] = item.prob * 100;
 
-                char text[256];
-                sprintf(
-                        text,
-                        "%d %f %f %f %f %.1f%%",
-                        item.label,
-                        array[0], array[1], array[2], array[3],
-                        item.prob * 100
-                );
+                jfloatArray result_array = env->NewFloatArray(6);
+                env->SetFloatArrayRegion(result_array, 0, 6, array);
 
                 //add
-                env->CallBooleanMethod(detect_array_obj, arraylist_add, env->NewStringUTF(text));
+                env->CallBooleanMethod(detect_array_obj, arraylist_add, result_array);
             }
         }
 
@@ -837,23 +829,19 @@ int Yolo::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_th
         jobject arraylist_obj = env->NewObject(list_clazz, arraylist_init);
 
         for (const auto &item: objects) {
-            float array[4];
+            float array[6];
             array[0] = item.rect.x;
             array[1] = item.rect.y;
             array[2] = item.rect.width;
             array[3] = item.rect.height;
+            array[4] = (float) item.label;
+            array[5] = item.prob * 100;
 
-            char text[256];
-            sprintf(
-                    text,
-                    "%d %f %f %f %f %.1f%%",
-                    item.label,
-                    array[0], array[1], array[2], array[3],
-                    item.prob * 100
-            );
+            jfloatArray result_array = env->NewFloatArray(6);
+            env->SetFloatArrayRegion(result_array, 0, 6, array);
 
             //add
-            env->CallBooleanMethod(arraylist_obj, arraylist_add, env->NewStringUTF(text));
+            env->CallBooleanMethod(arraylist_obj, arraylist_add, result_array);
         }
         //回调
         env->CallVoidMethod(j_callback, j_method_id, arraylist_obj);

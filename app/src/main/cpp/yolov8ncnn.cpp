@@ -183,10 +183,10 @@ JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadModel(JNIEnv *env, jobject thiz, jobject assetManager,
-                                                 jint model_id, jboolean use_gpu,
-                                                 jboolean use_classify, jboolean use_segmentation,
-                                                 jboolean use_detect) {
+Java_com_pengxh_ncnn_yolov8_Yolov8ncnn_loadModel(JNIEnv *env, jobject thiz,
+                                                 jobject assetManager, jint model_id,
+                                                 jboolean use_gpu, jboolean use_classify,
+                                                 jboolean use_segmentation, jboolean use_detect) {
     if (model_id < 0 || model_id > 2) {
         return JNI_FALSE;
     }
