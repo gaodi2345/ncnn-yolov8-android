@@ -657,7 +657,8 @@ override fun onDetect(output: ArrayList<FloatArray>) {
 
     yolo.type = it[4].toInt()
 
-    yolo.prob = "${it[5]}%"
+    //保留两位有效小数
+    yolo.prob = "${String.format("%.2f", it[5])}%"
     results.add(yolo)
   }
   Log.d(kTag, results.toJson())
